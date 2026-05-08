@@ -1,0 +1,117 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { AuthGuard } from '@nestjs/passport';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { FileService } from './file.service';
+import { InitUploadDto, CompleteUploadDto } from './dto';
+import { CurrentUser } from '../../common/decorators';
+
+@ApiTags('文件')
+@Controller('files')
+export class FileController {
+  constructor(private fileService: FileService) {}
+
+  @Post('init')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '初始化文件上传' })
+  async initUpload(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: InitUploadDto,
+  ) {
+    return this.fileService.initUpload(userId, dto);
+  }
+
+  @Post('chunk')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: '上传文件分片' })
+  @UseInterceptors(FileInterceptor('chunk'))
+  async uploadChunk(
+    @Body('fileId') fileId: string,
+    @Body('chunkIndex') chunkIndex: number,
+    @UploadedFile() chunk: Express.Multer.File,
+  ) {
+    return this.fileService.uploadChunk(
+      fileId,
+      parseInt(String(chunkIndex)),
+      chunk.buffer,
+    );
+  }
+
+  @Post('complete')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '完成文件上传' })
+  async completeUpload(@Body() dto: CompleteUploadDto) {
+    return this.fileService.completeUpload(dto);
+  }
+
+  @Post('upload')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: '简单文件上传(小文件)' })
+  @UseInterceptors(FileInterceptor('file'))
+  async simpleUpload(
+    @CurrentUser('userId') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('taskId') taskId?: string,
+    @Body('taskType') taskType?: string,
+  ) {
+    const initDto: InitUploadDto = {
+      originalName: file.originalname,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+      taskId,
+      taskType,
+      totalChunks: 1,
+    };
+
+    const fileEntity = await this.fileService.initUpload(userId, initDto);
+    await this.fileService.uploadChunk(fileEntity.id, 0, file.buffer);
+    return this.fileService.completeUpload({ fileId: fileEntity.id });
+  }
+
+  @Get(':id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取文件信息' })
+  async findOne(@Param('id') id: string) {
+    const file = await this.fileService.findOne(id);
+    const downloadUrl = await this.fileService.getDownloadUrl(id);
+    return { ...file, downloadUrl };
+  }
+
+  @Get(':id/download-url')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取文件下载URL' })
+  async getDownloadUrl(@Param('id') id: string) {
+    const url = await this.fileService.getDownloadUrl(id);
+    return { url };
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '删除文件' })
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    await this.fileService.remove(id, userId);
+    return { success: true };
+  }
+}

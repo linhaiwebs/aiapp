@@ -1,0 +1,41 @@
+version: '3.8'
+
+# 轻量部署：仅 Server（SQLite + 本地存储）
+# 适合小规模使用或测试环境，配合宿主机 Nginx
+#
+# 使用方式：
+# 1. cp .env.example .env  修改配置
+# 2. docker-compose -f docker-compose.lite.yml up -d
+# 3. 在宝塔 Nginx 中配置反向代理
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    ports:
+      - "${SERVER_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_TYPE=sqlite
+      - DB_SQLITE_PATH=data/xcai.db
+      - DB_SYNCHRONIZE=true
+      - DB_LOGGING=false
+      - STORAGE_TYPE=local
+      - STORAGE_LOCAL_PATH=data/uploads
+      - REDIS_ENABLED=false
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN:-15m}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - SMS_PROVIDER=${SMS_PROVIDER:-mock}
+    volumes:
+      - server_data:/app/data
+      # 可选：挂载自定义 admin/app 覆盖镜像内置的（一般不需要，Docker 构建时已包含）
+      # - ../admin/dist:/app/public/admin
+      # - ../app/build/web:/app/public/app
+    restart: unless-stopped
+
+volumes:
+  server_data:

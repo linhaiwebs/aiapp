@@ -1,0 +1,17 @@
+# Server
+server/node_modules
+server/dist
+
+# Admin
+admin/node_modules
+admin/dist
+
+# App (Flutter - never needed in Docker)
+app/
+.git
+*.md
+.env
+.env.*
+
+# Deploy configs
+deploy/

@@ -1,0 +1,156 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
+import { TaskService } from './task.service';
+import { CreateTaskDto, UpdateTaskDto, TaskFilterDto } from './dto';
+import { CurrentUser, Roles } from '../../common/decorators';
+import { UserRole } from '../../entities';
+
+@ApiTags('任务')
+@Controller('tasks')
+export class TaskController {
+  constructor(private taskService: TaskService) {}
+
+  @Get('search')
+  @ApiOperation({ summary: '搜索任务' })
+  async search(@Query('keyword') keyword: string, @Query('page') page = 1) {
+    const [items, total] = await this.taskService.search(keyword, page);
+    return { items, total };
+  }
+
+  @Get('claims/mine')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '我的任务领取记录' })
+  async getMyClaims(
+    @CurrentUser('userId') userId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.taskService.getUserClaims(userId, status as any);
+  }
+
+  @Get('claims/pending')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '待审批的任务申请' })
+  async getPendingClaims(
+    @Query('taskId') taskId?: string,
+    @Query('page') page = 1,
+    @Query('pageSize') pageSize = 20,
+  ) {
+    return this.taskService.getPendingClaims(taskId, page, pageSize);
+  }
+
+  @Get()
+  @ApiOperation({ summary: '任务列表' })
+  async findAll(@Query() filter: TaskFilterDto) {
+    return this.taskService.findAll(filter);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: '任务详情' })
+  async findOne(@Param('id') id: string) {
+    return this.taskService.findOne(id);
+  }
+
+  @Post()
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '创建任务' })
+  async create(@Body() dto: CreateTaskDto) {
+    return this.taskService.create(dto);
+  }
+
+  @Patch(':id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '更新任务' })
+  async update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
+    return this.taskService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '删除任务' })
+  async remove(@Param('id') id: string) {
+    await this.taskService.remove(id);
+    return { success: true };
+  }
+
+  @Post(':id/claim')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '申请任务（需审核员审批）' })
+  async claim(
+    @Param('id') taskId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.taskService.claim(userId, taskId);
+  }
+
+  @Post(':id/abandon')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '放弃任务' })
+  async abandon(
+    @Param('id') taskId: string,
+    @CurrentUser('userId') userId: string,
+    @Body('claimId') claimId: string,
+  ) {
+    await this.taskService.abandon(userId, claimId);
+    return { success: true };
+  }
+
+  @Post('claims/:claimId/approve')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '审批通过任务申请' })
+  async approveClaim(
+    @Param('claimId') claimId: string,
+    @CurrentUser('userId') reviewerId: string,
+  ) {
+    return this.taskService.approveClaim(claimId, reviewerId);
+  }
+
+  @Post('claims/:claimId/reject')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '拒绝任务申请' })
+  async rejectClaim(
+    @Param('claimId') claimId: string,
+    @CurrentUser('userId') reviewerId: string,
+    @Body('reason') reason?: string,
+  ) {
+    return this.taskService.rejectClaim(claimId, reviewerId, reason);
+  }
+
+  @Delete('data/all')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: '清除所有任务数据' })
+  async clearAllData() {
+    return this.taskService.clearAllTaskData();
+  }
+}

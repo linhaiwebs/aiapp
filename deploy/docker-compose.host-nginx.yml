@@ -1,0 +1,104 @@
+version: '3.8'
+
+# 适合服务器已有 Nginx 的部署方式
+# 宿主机 Nginx (80/443) → Docker Server (3000)
+# 无需 Docker 内 Nginx，避免双重代理
+# Postgres/Redis/MinIO 仅容器内网互通，不暴露端口
+#
+# 使用方式：
+# 1. cp .env.example .env  修改配置
+# 2. docker-compose -f docker-compose.host-nginx.yml up -d
+# 3. 在宝塔 Nginx 中配置反向代理（参考 DEPLOY_GUIDE.md）
+
+services:
+  server:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    ports:
+      - "${SERVER_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_TYPE=${DB_TYPE:-postgres}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USERNAME=${DB_USERNAME:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_DATABASE=${DB_DATABASE:-xcai}
+      - DB_SYNCHRONIZE=${DB_SYNCHRONIZE:-true}
+      - DB_LOGGING=${DB_LOGGING:-false}
+      - REDIS_ENABLED=${REDIS_ENABLED:-true}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - STORAGE_TYPE=${STORAGE_TYPE:-minio}
+      - MINIO_ENDPOINT=minio
+      - MINIO_PORT=9000
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-xcai}
+      - MINIO_USE_SSL=${MINIO_USE_SSL:-false}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN:-15m}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - SMS_PROVIDER=${SMS_PROVIDER:-mock}
+      - SMS_ACCESS_KEY_ID=${SMS_ACCESS_KEY_ID:-}
+      - SMS_ACCESS_KEY_SECRET=${SMS_ACCESS_KEY_SECRET:-}
+      - SMS_SIGN_NAME=${SMS_SIGN_NAME:-}
+      - SMS_TEMPLATE_CODE=${SMS_TEMPLATE_CODE:-}
+    volumes:
+      - server_data:/app/data
+      # 可选：挂载自定义 admin/app 覆盖镜像内置的（一般不需要，Docker 构建时已包含）
+      # - ../admin/dist:/app/public/admin
+      # - ../app/build/web:/app/public/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    # 不暴露端口 - 仅 Docker 内网访问，避免与宿主机 PG 冲突
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-xcai}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # 不暴露端口 - 仅 Docker 内网访问
+    command: redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    # 不暴露端口 - 仅 Docker 内网访问
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  server_data:

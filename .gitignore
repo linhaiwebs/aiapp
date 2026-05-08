@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env.local
+.env.production
+*.log
+.agents_tmp/
+
+# Flutter build artifacts
+app/build/
+app/.dart_tool/flutter_build/
+app/.dart_tool/hooks_runner/objective_c/
+
+# Server data (SQLite DB, uploads)
+server/data/
