@@ -24,6 +24,7 @@ import {
   QQLoginDto,
   RefreshTokenDto,
   RealNameVerifyDto,
+  ChangePasswordDto,
 } from './dto';
 import { CurrentUser } from '../../common/decorators';
 
@@ -95,6 +96,18 @@ export class AuthController {
     @Body() dto: RealNameVerifyDto,
   ) {
     return this.authService.verifyRealName(userId, dto);
+  }
+
+  @Post('change-password')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '修改密码' })
+  @HttpCode(HttpStatus.OK)
+  async changePassword(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(userId, dto.oldPassword, dto.newPassword);
   }
 
   @Get('me')

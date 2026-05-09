@@ -83,6 +83,20 @@ export class RefreshTokenDto {
   refreshToken: string;
 }
 
+export class ChangePasswordDto {
+  @ApiProperty({ description: '当前密码' })
+  @IsString()
+  @IsNotEmpty()
+  oldPassword: string;
+
+  @ApiProperty({ description: '新密码', minLength: 6 })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6)
+  @MaxLength(50)
+  newPassword: string;
+}
+
 export class RealNameVerifyDto {
   @ApiProperty({ description: '真实姓名' })
   @IsString()

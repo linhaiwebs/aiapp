@@ -102,6 +102,17 @@ class AuthService {
     return res.data;
   }
 
+  Future<Map<String, dynamic>> changePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) async {
+    final res = await _client.dio.post('/auth/change-password', data: {
+      'oldPassword': oldPassword,
+      'newPassword': newPassword,
+    });
+    return res.data;
+  }
+
   Future<UserModel> getMe() async {
     final res = await _client.dio.get('/auth/me');
     return UserModel.fromJson(res.data);

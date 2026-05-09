@@ -258,6 +258,18 @@ export class AuthService {
     return this.smsService.sendCode(phone);
   }
 
+  async changePassword(userId: string, oldPassword: string, newPassword: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('用户不存在');
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) throw new UnauthorizedException('当前密码不正确');
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await this.userRepository.save(user);
+    return { success: true, message: '密码修改成功' };
+  }
+
   async getMe(userId: string) {
     const user = await this.userRepository.findOne({
       where: { id: userId },

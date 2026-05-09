@@ -129,7 +129,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         title: '账户安全',
                         subtitle: '修改密码，保护账号',
                         showDivider: false,
-                        onTap: () {},
+                        onTap: () => context.push('/account-security'),
                       ),
                     ]),
 
@@ -164,14 +164,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         icon: Icons.settings_outlined,
                         title: '设置',
                         subtitle: '应用设置与偏好',
-                        onTap: () {},
+                        onTap: () => context.push('/settings'),
                       ),
                       _MenuItem(
                         icon: Icons.info_outline,
                         title: '关于',
                         subtitle: '端云智采 v1.0.0',
                         showDivider: false,
-                        onTap: () {},
+                        onTap: () => context.push('/about'),
                       ),
                     ]),
 
