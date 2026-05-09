@@ -45,7 +45,7 @@ export class SmsService {
     this.cooldownMs = this.configService.get<number>('sms.codeCooldownSeconds', 60) * 1000;
     this.maxSendPerDay = this.configService.get<number>('sms.maxSendPerDay', 10);
 
-    this.marketHost = this.configService.get<string>('sms.marketHost', 'smsapi.market.alicloudapi.com');
+    this.marketHost = this.configService.get<string>('sms.marketHost', 'send.market.alicloudapi.com');
     this.marketPath = this.configService.get<string>('sms.marketPath', '/sms/send');
     this.appCode = this.configService.get<string>('sms.appCode', '');
     this.templateId = this.configService.get<string>('sms.templateId', 'lxym_20111_sdgsfhwqgvyh');

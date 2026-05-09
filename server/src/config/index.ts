@@ -70,7 +70,7 @@ export const smsConfig = registerAs('sms', () => ({
   // 阿里云市场短信服务 (cmapi00067513)
   appCode: process.env.SMS_APP_CODE || '',
   templateId: process.env.SMS_TEMPLATE_ID || 'lxym_20111_sdgsfhwqgvyh',
-  marketHost: process.env.SMS_MARKET_HOST || 'smsapi.market.alicloudapi.com',
+  marketHost: process.env.SMS_MARKET_HOST || 'send.market.alicloudapi.com',
   marketPath: process.env.SMS_MARKET_PATH || '/sms/send',
   // Rate limiting
   codeLength: parseInt(process.env.SMS_CODE_LENGTH || '6', 10),
