@@ -1,15 +1,23 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-// Types from ambient declarations (erased at compile time, no runtime resolve)
-import type { Client } from '@modelcontextprotocol/sdk/client';
-import type { SSEClientTransport as SSEClientTransportType } from '@modelcontextprotocol/sdk/client/sse';
+// Inline type declarations to avoid compile-time dependency on @modelcontextprotocol/sdk
+interface MCPClient {
+  connect(transport: any): Promise<void>;
+  callTool(params: { name: string; arguments: Record<string, string> }): Promise<{
+    isError?: boolean;
+    content: Array<{ type: string; text: string }>;
+  }>;
+}
+interface MCPTransport {
+  new(url: URL): any;
+}
 
 // Load MCP SDK via direct filesystem path
 const path = require('path');
 const mcpCjsDir = path.join(__dirname, '..', '..', '..', 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'cjs');
-const { Client: MCPClient } = require(path.join(mcpCjsDir, 'client', 'index.js')) as { Client: typeof Client };
-const { SSEClientTransport } = require(path.join(mcpCjsDir, 'client', 'sse.js')) as { SSEClientTransport: typeof SSEClientTransportType };
+const { Client: MCPClient } = require(path.join(mcpCjsDir, 'client', 'index.js'));
+const { SSEClientTransport } = require(path.join(mcpCjsDir, 'client', 'sse.js'));
 
 export interface OcrFrontResult {
   name: string;
@@ -35,8 +43,8 @@ export interface VerifyResult {
 
 @Injectable()
 export class RealNameService {
-  private mcpClient: Client | null = null;
-  private mcpTransport: SSEClientTransportType | null = null;
+  private mcpClient: MCPClient | null = null;
+  private mcpTransport: MCPTransport | null = null;
   private mcpConnected = false;
   private readonly mcpUrl: string;
 
@@ -60,7 +68,7 @@ export class RealNameService {
         { name: 'xcai-realname', version: '1.0.0' },
         { capabilities: {} },
       );
-      await this.mcpClient.connect(this.mcpTransport);
+      await this.mcpClient!.connect(this.mcpTransport);
       this.mcpConnected = true;
       console.log('[RealName] MCP client connected');
     } catch (error) {
