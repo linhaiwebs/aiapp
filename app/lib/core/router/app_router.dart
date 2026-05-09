@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/auth/pages/splash_page.dart';
+import '../../features/auth/pages/onboarding_page.dart';
 import '../../features/auth/pages/login_page.dart';
 import '../../features/auth/pages/register_page.dart';
 import '../../features/auth/pages/real_name_page.dart';
@@ -46,6 +47,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     routes: [
       GoRoute(path: '/splash', pageBuilder: (context, state) => _slidePage(const SplashPage(), state)),
+      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingPage()),
       GoRoute(path: '/login', pageBuilder: (context, state) => _slidePage(const LoginPage(), state)),
       GoRoute(path: '/register', pageBuilder: (context, state) => _slidePage(const RegisterPage(), state)),
       GoRoute(path: '/real-name', pageBuilder: (context, state) => _slidePage(const RealNamePage(), state)),
