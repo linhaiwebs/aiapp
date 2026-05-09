@@ -49,6 +49,7 @@ import { appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsCo
           entities: [__dirname + '/entities/**/*.entity{.ts,.js}'],
           synchronize: configService.get<boolean>('database.synchronize'),
           logging: configService.get<boolean>('database.logging'),
+          uuidExtension: 'pgcrypto',
         };
       },
     }),
