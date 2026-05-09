@@ -7,10 +7,11 @@ class TaskService {
   final DioClient _client;
   TaskService(this._client);
 
-  Future<List<TaskModel>> findAll({String? type, int page = 1, int pageSize = 20}) async {
+  Future<List<TaskModel>> findAll({String? type, String? teamId, int page = 1, int pageSize = 20}) async {
     // Only show published & in_progress tasks in the task square
     final res = await _client.dio.get('/tasks', queryParameters: {
       if (type != null) 'type': type,
+      if (teamId != null) 'teamId': teamId,
       'status': 'published,in_progress',
       'page': page,
       'pageSize': pageSize,
@@ -20,7 +21,7 @@ class TaskService {
       try {
         return TaskModel.fromJson(e as Map<String, dynamic>);
       } catch (err) {
-        print('[TaskModel.fromJson] FAILED: $err\n  data: $e');
+        // Logging: TaskModel.fromJson parse failure
         rethrow;
       }
     }).toList();
@@ -55,6 +56,11 @@ class TaskService {
     });
     final list = res.data is List ? res.data : res.data['items'] ?? [];
     return (list as List).map((e) => TaskClaimModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<TaskModel> create(Map<String, dynamic> data) async {
+    final res = await _client.dio.post('/tasks', data: data);
+    return TaskModel.fromJson(res.data);
   }
 }
 

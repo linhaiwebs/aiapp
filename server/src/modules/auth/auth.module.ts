@@ -9,6 +9,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { RolesGuard } from './guards/roles.guard';
 import { User, UserProfile } from '../../entities';
 import { SmsModule } from '../sms/sms.module';
+import { RealNameModule } from '../real-name/real-name.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { SmsModule } from '../sms/sms.module';
       }),
     }),
     SmsModule,
+    RealNameModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, RolesGuard],

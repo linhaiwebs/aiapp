@@ -1,9 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/storage/auth_storage.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
@@ -15,7 +16,7 @@ class SplashPage extends ConsumerStatefulWidget {
 class _SplashPageState extends ConsumerState<SplashPage>
     with SingleTickerProviderStateMixin {
   double _progress = 0;
-  late AnimationController _controller;
+  late final AnimationController _controller;
 
   @override
   void initState() {
@@ -35,6 +36,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
     if (!mounted) return;
     final authStorage = ref.read(authStorageProvider);
     final token = await authStorage.getToken();
+    if (!mounted) return;
     if (token != null && token != 'undefined') {
       context.go('/home');
     } else {
@@ -51,7 +53,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surfaceContainerLowest,
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
           // Decorative gradient blurs
@@ -63,14 +65,12 @@ class _SplashPageState extends ConsumerState<SplashPage>
               height: MediaQuery.of(context).size.height * 0.5,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.primaryFixedDim.withValues(alpha: 0.2),
-              ),
-              child: BackdropFilter(
-                filter: ColorFilter.mode(
-                  AppColors.primaryFixedDim.withValues(alpha: 0.1),
-                  BlendMode.srcOver,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.primaryFixedDim.withValues(alpha: 0.2),
+                    AppColors.primaryFixedDim.withValues(alpha: 0.0),
+                  ],
                 ),
-                child: const SizedBox.expand(),
               ),
             ),
           ),
@@ -82,7 +82,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
               height: MediaQuery.of(context).size.height * 0.5,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.primaryFixed.withValues(alpha: 0.15),
+                color: AppColors.primaryFixed.withValues(alpha: 0.12),
               ),
             ),
           ),
@@ -107,7 +107,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
                       ),
                     ],
                     border: Border.all(
-                      color: AppColors.surfaceContainerLow.withValues(alpha: 0.5),
+                      color: AppColors.outlineVariant.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Center(
@@ -177,7 +177,7 @@ class _SplashPageState extends ConsumerState<SplashPage>
                     value: _progress,
                     minHeight: 8.h,
                     backgroundColor: AppColors.surfaceContainer,
-                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                   ),
                 ),
               ],
@@ -188,4 +188,3 @@ class _SplashPageState extends ConsumerState<SplashPage>
     );
   }
 }
-

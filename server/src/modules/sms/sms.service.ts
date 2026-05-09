@@ -4,6 +4,17 @@ import Dysmsapi20170525, * as dysmsapi from '@alicloud/dysmsapi20170525';
 import * as OpenApi from '@alicloud/openapi-client';
 import * as Util from '@alicloud/tea-util';
 
+// Types from ambient declarations (erased at compile time, no runtime resolve)
+import type { Client } from '@modelcontextprotocol/sdk/client';
+import type { SSEClientTransport as SSEClientTransportType } from '@modelcontextprotocol/sdk/client/sse';
+
+// Load MCP SDK via direct filesystem path — bypasses Node.js v22 exports-field resolution.
+// The SDK's CJS main entry is broken (missing dist/cjs/index.js), so we resolve from __dirname.
+const path = require('path');
+const mcpCjsDir = path.join(__dirname, '..', '..', '..', 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'cjs');
+const { Client: MCPClient } = require(path.join(mcpCjsDir, 'client', 'index.js')) as { Client: typeof Client };
+const { SSEClientTransport } = require(path.join(mcpCjsDir, 'client', 'sse.js')) as { SSEClientTransport: typeof SSEClientTransportType };
+
 interface SmsRecord {
   code: string;
   sentAt: number;     // timestamp ms
@@ -22,7 +33,10 @@ export interface SmsLogEntry {
 
 @Injectable()
 export class SmsService {
-  private client: Dysmsapi20170525 | null = null;
+  private aliyunClient: Dysmsapi20170525 | null = null;
+  private mcpClient: Client | null = null;
+  private mcpTransport: SSEClientTransportType | null = null;
+  private mcpConnected = false;
   private store = new Map<string, SmsRecord>();
   private dailyCount = new Map<string, number>();
   private dailyResetDate = new Date().toDateString();
@@ -38,6 +52,8 @@ export class SmsService {
   private readonly codeTtlMs: number;
   private readonly cooldownMs: number;
   private readonly maxSendPerDay: number;
+  private readonly mcpUrl: string;
+  private readonly mcpTemplateId: string;
 
   constructor(private configService: ConfigService) {
     this.provider = this.configService.get<string>('sms.provider', 'mock');
@@ -47,6 +63,8 @@ export class SmsService {
     this.codeTtlMs = this.configService.get<number>('sms.codeTtlSeconds', 300) * 1000;
     this.cooldownMs = this.configService.get<number>('sms.codeCooldownSeconds', 60) * 1000;
     this.maxSendPerDay = this.configService.get<number>('sms.maxSendPerDay', 10);
+    this.mcpUrl = this.configService.get<string>('sms.mcpUrl', '');
+    this.mcpTemplateId = this.configService.get<string>('sms.mcpTemplateId', 'lxym_20111_sdgsfhwqgvyh');
 
     if (this.provider === 'aliyun') {
       const accessKeyId = this.configService.get<string>('sms.accessKeyId', '');
@@ -59,8 +77,19 @@ export class SmsService {
           accessKeySecret,
           endpoint: 'dysmsapi.aliyuncs.com',
         });
-        this.client = new Dysmsapi20170525(config);
+        this.aliyunClient = new Dysmsapi20170525(config);
         console.log('[SMS] Aliyun SMS client initialized');
+      }
+    } else if (this.provider === 'mcp') {
+      if (!this.mcpUrl) {
+        console.warn('[SMS] MCP SMS configured but mcpUrl is empty. Falling back to mock mode.');
+      } else {
+        this.mcpTransport = new SSEClientTransport(new URL(this.mcpUrl));
+        this.mcpClient = new MCPClient(
+          { name: 'xcai-server', version: '1.0.0' },
+          { capabilities: {} },
+        );
+        console.log('[SMS] MCP SMS client initialized');
       }
     } else {
       console.log('[SMS] Using mock SMS provider (codes logged to console)');
@@ -87,8 +116,10 @@ export class SmsService {
 
     const code = this.generateCode();
 
-    if (this.provider === 'aliyun' && this.client) {
+    if (this.provider === 'aliyun' && this.aliyunClient) {
       await this.sendViaAliyun(phone, code);
+    } else if (this.provider === 'mcp' && this.mcpClient && this.mcpUrl) {
+      await this.sendViaMcp(phone, code);
     } else {
       console.log(`[SMS MOCK] Phone: ${phone}, Code: ${code}`);
     }
@@ -98,16 +129,21 @@ export class SmsService {
     this.dailyCount.set(phone, dailySent + 1);
 
     // Record log
+    const activeProvider = this.provider === 'aliyun' && this.aliyunClient
+      ? 'aliyun'
+      : this.provider === 'mcp' && this.mcpClient && this.mcpUrl
+        ? 'mcp'
+        : 'mock';
     this.addLog({
       phone,
       code,
       sentAt: new Date().toISOString(),
       verified: false,
       expired: false,
-      provider: this.provider === 'aliyun' && this.client ? 'aliyun' : 'mock',
+      provider: activeProvider,
     });
 
-    if (this.provider === 'aliyun' && this.client) {
+    if (activeProvider !== 'mock') {
       return { success: true, message: '验证码已发送' };
     }
     return { success: true, message: '验证码已发送（Mock模式）', code };
@@ -191,7 +227,7 @@ export class SmsService {
     const runtime = new Util.RuntimeOptions({});
 
     try {
-      const response = await this.client!.sendSmsWithOptions(request, runtime);
+      const response = await this.aliyunClient!.sendSmsWithOptions(request, runtime);
       if (response.body?.code !== 'OK') {
         console.error('[SMS] Aliyun send failed:', response.body?.code, response.body?.message);
         throw new BadRequestException(`短信发送失败: ${response.body?.message || '未知错误'}`);
@@ -200,6 +236,41 @@ export class SmsService {
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
       console.error('[SMS] Aliyun send error:', error);
+      throw new BadRequestException('短信发送失败，请稍后重试');
+    }
+  }
+
+  private async sendViaMcp(phone: string, code: string): Promise<void> {
+    try {
+      if (!this.mcpConnected) {
+        await this.mcpClient!.connect(this.mcpTransport!);
+        this.mcpConnected = true;
+        console.log('[SMS] MCP client connected');
+      }
+
+      const result = await this.mcpClient!.callTool({
+        name: '短信验证码',
+        arguments: {
+          mobile: phone,
+          content: `code:${code}`,
+          templateid: this.mcpTemplateId,
+        },
+      });
+
+      console.log(`[SMS] Code sent to ${phone} via MCP`);
+
+      if (result.isError) {
+        const errText = result.content
+          .filter((c: any) => c.type === 'text')
+          .map((c: any) => c.text)
+          .join('; ');
+        console.error('[SMS] MCP send failed:', errText);
+        throw new BadRequestException(`短信发送失败: ${errText || '未知错误'}`);
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      this.mcpConnected = false;
+      console.error('[SMS] MCP send error:', error);
       throw new BadRequestException('短信发送失败，请稍后重试');
     }
   }

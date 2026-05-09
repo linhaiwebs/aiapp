@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Table, Button, Space, Card, Tag, Select, Input, Modal, message } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Card, Tag, Select, Input, Modal, message, Popconfirm } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { taskApi } from '../../api';
 
 const { Search } = Input;
@@ -19,6 +19,7 @@ const statusMap: Record<string, { label: string; color: string }> = {
   in_progress: { label: '进行中', color: 'green' },
   completed: { label: '已完成', color: 'cyan' },
   closed: { label: '已关闭', color: 'red' },
+  archived: { label: '已归档', color: 'default' },
 };
 
 export default function TaskList() {
@@ -29,6 +30,10 @@ export default function TaskList() {
   const [typeFilter, setTypeFilter] = useState<string | undefined>();
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const navigate = useNavigate();
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [batchStatusModal, setBatchStatusModal] = useState(false);
+  const [batchStatus, setBatchStatus] = useState<string>('published');
 
   useEffect(() => {
     loadTasks();
@@ -93,6 +98,32 @@ export default function TaskList() {
     }
   };
 
+  const handleBatchDelete = async () => {
+    setBatchDeleting(true);
+    try {
+      await taskApi.batchDelete(selectedRowKeys as string[]);
+      message.success(`成功删除 ${selectedRowKeys.length} 条任务`);
+      setSelectedRowKeys([]);
+      loadTasks();
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '批量删除失败');
+    } finally {
+      setBatchDeleting(false);
+    }
+  };
+
+  const handleBatchStatus = async () => {
+    try {
+      await taskApi.batchUpdateStatus(selectedRowKeys as string[], batchStatus);
+      message.success(`成功更新 ${selectedRowKeys.length} 条任务状态`);
+      setBatchStatusModal(false);
+      setSelectedRowKeys([]);
+      loadTasks();
+    } catch (e: any) {
+      message.error(e.response?.data?.message || '操作失败');
+    }
+  };
+
   const columns = [
     { title: '任务标题', dataIndex: 'title', key: 'title', ellipsis: true },
     {
@@ -154,7 +185,7 @@ export default function TaskList() {
           allowClear
           style={{ width: 120 }}
           value={typeFilter}
-          onChange={setTypeFilter}
+          onChange={(v) => { setTypeFilter(v); setSelectedRowKeys([]); }}
           options={[
             { label: '语音', value: 'audio' },
             { label: '图像', value: 'image' },
@@ -167,16 +198,39 @@ export default function TaskList() {
           allowClear
           style={{ width: 120 }}
           value={statusFilter}
-          onChange={setStatusFilter}
+          onChange={(v) => { setStatusFilter(v); setSelectedRowKeys([]); }}
           options={Object.entries(statusMap).map(([value, { label }]) => ({ label, value }))}
         />
         <Search placeholder="搜索任务" onSearch={handleSearch} style={{ width: 200 }} />
       </Space>
+
+      <Space style={{ marginBottom: 16 }}>
+        {selectedRowKeys.length > 0 && (
+          <>
+            <Popconfirm
+              title={`确认删除选中的 ${selectedRowKeys.length} 个任务？`}
+              onConfirm={handleBatchDelete}
+            >
+              <Button danger icon={<DeleteOutlined />} loading={batchDeleting}>
+                批量删除({selectedRowKeys.length})
+              </Button>
+            </Popconfirm>
+            <Button icon={<EditOutlined />} onClick={() => setBatchStatusModal(true)}>
+              批量修改状态
+            </Button>
+          </>
+        )}
+      </Space>
+
       <Table
         rowKey="id"
         columns={columns}
         dataSource={data}
         loading={loading}
+        rowSelection={{
+          selectedRowKeys,
+          onChange: setSelectedRowKeys,
+        }}
         pagination={{
           current: page,
           total,
@@ -184,6 +238,27 @@ export default function TaskList() {
           onChange: setPage,
         }}
       />
+
+      <Modal
+        title="批量修改任务状态"
+        open={batchStatusModal}
+        onOk={handleBatchStatus}
+        onCancel={() => setBatchStatusModal(false)}
+      >
+        <Select
+          style={{ width: '100%' }}
+          value={batchStatus}
+          onChange={setBatchStatus}
+          placeholder="选择目标状态"
+          options={[
+            { label: '已发布', value: 'published' },
+            { label: '进行中', value: 'in_progress' },
+            { label: '已完成', value: 'completed' },
+            { label: '已关闭', value: 'closed' },
+            { label: '已归档', value: 'archived' },
+          ]}
+        />
+      </Modal>
     </Card>
   );
 }

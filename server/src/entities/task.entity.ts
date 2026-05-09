@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Project } from './project.entity';
 import { Category } from './category.entity';
+import { Team } from './team.entity';
 import { TaskRequirement } from './task-requirement.entity';
 import { TaskSample } from './task-sample.entity';
 import { TaskClaim } from './task-claim.entity';
@@ -214,6 +215,10 @@ export class Task {
   @Column({ type: 'int', default: 0 })
   textAssignCount: number;
 
+  /** 每人分配条数（0表示不启用此模式） */
+  @Column({ type: 'int', default: 0 })
+  textPerUserCount: number;
+
   /** 是否复制多份文本分配给多名采集人员 */
   @Column({ default: false })
   textCopyForAssign: boolean;
@@ -230,6 +235,12 @@ export class Task {
 
   @Column({ nullable: true })
   categoryId: string;
+
+  @ManyToOne(() => Team, { nullable: true })
+  team: Team;
+
+  @Column({ nullable: true })
+  teamId: string;
 
   @OneToMany(() => TaskRequirement, (req) => req.task, { cascade: true })
   requirements: TaskRequirement[];

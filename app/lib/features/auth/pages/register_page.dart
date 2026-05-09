@@ -25,7 +25,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   Future<void> _sendSmsCode() async {
     if (_phoneController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('请输入手机号'), backgroundColor: AppColors.error));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入手机号'), backgroundColor: AppColors.error));
       return;
     }
     try {
@@ -57,7 +57,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   Future<void> _handleRegister() async {
     if (_phoneController.text.isEmpty || _passwordController.text.isEmpty || _smsCodeController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('请填写完整信息'), backgroundColor: AppColors.error));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请填写完整信息'), backgroundColor: AppColors.error));
       return;
     }
     setState(() => _isLoading = true);
@@ -78,11 +78,13 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           final user = UserModel.fromJson(result['user'] as Map<String, dynamic>);
           await authStorage.saveUser(user);
         }
+        if (!mounted) return;
         context.go('/home');
       } else {
         // Backend doesn't return tokens on register — go to login
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: const Text('注册成功，请登录'), backgroundColor: AppColors.secondary),
+          const SnackBar(content: Text('注册成功，请登录'), backgroundColor: AppColors.secondary),
         );
         context.go('/login');
       }
@@ -109,27 +111,221 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.surfaceContainerLowest,
-      appBar: AppBar(backgroundColor: AppColors.surfaceContainerLowest, title: Text('注册', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600))),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(24.w),
-        child: Column(children: [
-          TextField(controller: _phoneController, keyboardType: TextInputType.phone, decoration: InputDecoration(hintText: '请输入手机号', prefixIcon: const Icon(Icons.phone_android, color: AppColors.outline))),
-          SizedBox(height: 16.h),
-          Row(children: [
-            Expanded(child: TextField(controller: _smsCodeController, keyboardType: TextInputType.number, decoration: InputDecoration(hintText: '验证码', prefixIcon: const Icon(Icons.sms, color: AppColors.outline)))),
-            SizedBox(width: 12.w),
-            SizedBox(width: 120.w, height: 48.h, child: OutlinedButton(onPressed: _countdown > 0 ? null : _sendSmsCode, child: Text(_countdown > 0 ? '${_countdown}s' : '获取验证码', style: TextStyle(fontSize: 13.sp)))),
-          ]),
-          SizedBox(height: 16.h),
-          TextField(controller: _passwordController, obscureText: _obscurePassword, decoration: InputDecoration(hintText: '请设置密码(6位以上)', prefixIcon: const Icon(Icons.lock_outline, color: AppColors.outline), suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, color: AppColors.outline), onPressed: () => setState(() => _obscurePassword = !_obscurePassword)))),
-          SizedBox(height: 16.h),
-          TextField(controller: _nicknameController, decoration: InputDecoration(hintText: '昵称(选填)', prefixIcon: const Icon(Icons.person, color: AppColors.outline))),
-          SizedBox(height: 32.h),
-          SizedBox(width: double.infinity, height: 48.h, child: ElevatedButton(onPressed: _isLoading ? null : _handleRegister, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: AppColors.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r))), child: _isLoading ? SizedBox(width: 20.w, height: 20.w, child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.onPrimary)) : Text('注册', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600)))),
-          SizedBox(height: 16.h),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [Text('已有账号？', style: TextStyle(fontSize: 14.sp, color: AppColors.onSurfaceVariant)), TextButton(onPressed: () => context.go('/login'), child: Text('立即登录', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary)))]),
-        ]),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.symmetric(horizontal: 24.w),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: 16.h),
+              // Back button
+              IconButton(
+                icon: Icon(
+                  Icons.arrow_back,
+                  color: AppColors.onSurface,
+                  size: 24.sp,
+                ),
+                onPressed: () => context.go('/login'),
+              ),
+              SizedBox(height: 16.h),
+              // Title
+              Text(
+                '创建账号',
+                style: TextStyle(
+                  fontSize: 20.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              SizedBox(height: 24.h),
+              // Card-like form area
+              Container(
+                padding: EdgeInsets.all(24.w),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(
+                    color: AppColors.outlineVariant,
+                    width: 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Phone input
+                    Text(
+                      '手机号',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        hintText: '请输入手机号',
+                        prefixIcon: Icon(
+                          Icons.phone_android,
+                          color: AppColors.outline,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20.h),
+                    // SMS code input
+                    Text(
+                      '验证码',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    TextField(
+                      controller: _smsCodeController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: '请输入验证码',
+                        prefixIcon: const Icon(
+                          Icons.sms_outlined,
+                          color: AppColors.outline,
+                        ),
+                        suffixIcon: Padding(
+                          padding: EdgeInsets.only(right: 4.w),
+                          child: TextButton(
+                            onPressed:
+                                _countdown > 0 ? null : _sendSmsCode,
+                            child: Text(
+                              _countdown > 0
+                                  ? '${_countdown}s'
+                                  : '发送验证码',
+                              style: TextStyle(
+                                fontSize: 13.sp,
+                                color: _countdown > 0
+                                    ? AppColors.outline
+                                    : AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20.h),
+                    // Password input
+                    Text(
+                      '密码',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        hintText: '请设置密码（6位以上）',
+                        prefixIcon: const Icon(
+                          Icons.lock_outline,
+                          color: AppColors.outline,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword
+                                ? Icons.visibility_off
+                                : Icons.visibility,
+                            color: AppColors.outline,
+                          ),
+                          onPressed: () => setState(
+                            () => _obscurePassword = !_obscurePassword,
+                          ),
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 20.h),
+                    // Nickname input (optional)
+                    Text(
+                      '昵称（选填）',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    TextField(
+                      controller: _nicknameController,
+                      decoration: const InputDecoration(
+                        hintText: '请输入昵称',
+                        prefixIcon: Icon(
+                          Icons.person_outline,
+                          color: AppColors.outline,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 24.h),
+                    // Register button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48.h,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _handleRegister,
+                        child: _isLoading
+                            ? SizedBox(
+                                width: 20.w,
+                                height: 20.w,
+                                child: const CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.onPrimary,
+                                ),
+                              )
+                            : Text(
+                                '注册',
+                                style: TextStyle(
+                                  fontSize: 16.sp,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: 16.h),
+              // Login link
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '已有账号？',
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => context.go('/login'),
+                    child: Text(
+                      '立即登录',
+                      style: TextStyle(
+                        fontSize: 14.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 32.h),
+            ],
+          ),
+        ),
       ),
     );
   }

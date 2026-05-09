@@ -1,6 +1,23 @@
-enum UserRole { collector, reviewer, admin, superAdmin }
+enum UserRole { member, leader, superAdmin }
+
+extension UserRoleLabel on UserRole {
+  String get label => switch (this) {
+        UserRole.member => '会员',
+        UserRole.leader => '团长',
+        UserRole.superAdmin => '超级管理员',
+      };
+}
 
 enum UserStatus { active, inactive, blacklisted }
+
+UserRole _parseRole(String? value) {
+  if (value == null) return UserRole.member;
+  return switch (value) {
+    'leader' => UserRole.leader,
+    'super_admin' || 'superAdmin' => UserRole.superAdmin,
+    _ => UserRole.member,
+  };
+}
 
 /// Helper: parse a value that may be String or num into double
 double _toDouble(dynamic v, double defaults) {
@@ -31,7 +48,7 @@ class UserModel {
     required this.phone,
     this.nickname,
     this.avatar,
-    this.role = UserRole.collector,
+    this.role = UserRole.member,
     this.status = UserStatus.active,
     this.qualityScore = 100,
     this.balance = 0,
@@ -48,10 +65,7 @@ class UserModel {
         phone: json['phone'] as String,
         nickname: json['nickname'] as String?,
         avatar: json['avatar'] as String?,
-        role: UserRole.values.firstWhere(
-          (e) => e.name == json['role'],
-          orElse: () => UserRole.collector,
-        ),
+        role: _parseRole(json['role'] as String?),
         status: UserStatus.values.firstWhere(
           (e) => e.name == json['status'],
           orElse: () => UserStatus.active,
@@ -71,9 +85,8 @@ class UserModel {
   String get displayName => nickname ?? phone.replaceRange(3, 7, '****');
 
   String get roleLabel => switch (role) {
-        UserRole.collector => '采集员',
-        UserRole.reviewer => '审核员',
-        UserRole.admin => '管理员',
+        UserRole.member => '会员',
+        UserRole.leader => '团长',
         UserRole.superAdmin => '超级管理员',
       };
 

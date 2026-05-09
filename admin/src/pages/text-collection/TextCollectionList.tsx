@@ -139,6 +139,9 @@ export default function TextCollectionList() {
           <Form.Item name="assignCount" label="分配人数">
             <InputNumber min={0} style={{ width: '100%' }} placeholder="0=自动计算" />
           </Form.Item>
+          <Form.Item name="perUserCount" label="每人条数">
+            <InputNumber min={0} style={{ width: '100%' }} placeholder="每人X条（优先）" />
+          </Form.Item>
           <Form.Item name="copyForAssign" label="复制多份分配" valuePropName="checked">
             <Switch />
           </Form.Item>

@@ -20,6 +20,7 @@ export default function TeamList() {
   const [members, setMembers] = useState<any[]>([]);
   const [inviteModal, setInviteModal] = useState<any>(null);
   const [users, setUsers] = useState<any[]>([]);
+  const [leaders, setLeaders] = useState<any[]>([]);
   const [addMemberModal, setAddMemberModal] = useState<any>(null);
   const [form] = Form.useForm();
   const [inviteForm] = Form.useForm();
@@ -44,10 +45,18 @@ export default function TeamList() {
     } catch { /* ignore */ }
   };
 
+  const loadLeaders = async (keyword?: string) => {
+    try {
+      const res: any = await userApi.list({ role: 'leader', pageSize: 200, keyword: keyword || undefined });
+      setLeaders(res.items || []);
+    } catch { /* ignore */ }
+  };
+
   const handleCreate = async () => {
     try {
       const values = await form.validateFields();
-      await teamApi.create(values);
+      const leader = leaders.find((l: any) => l.id === values.leaderId);
+      await teamApi.create({ ...values, leaderName: leader?.nickname || leader?.phone || '' });
       message.success('创建成功');
       setCreateModal(false);
       form.resetFields();
@@ -60,7 +69,8 @@ export default function TeamList() {
   const handleEdit = async () => {
     try {
       const values = await form.validateFields();
-      await teamApi.update(editModal.id, values);
+      const leader = leaders.find((l: any) => l.id === values.leaderId);
+      await teamApi.update(editModal.id, { ...values, leaderName: leader?.nickname || leader?.phone || '' });
       message.success('更新成功');
       setEditModal(null);
       form.resetFields();
@@ -139,7 +149,7 @@ export default function TeamList() {
       render: (_: any, record: any) => (
         <Space size="small">
           <Button type="link" size="small" onClick={() => handleViewMembers(record)}>成员</Button>
-          <Button type="link" size="small" onClick={() => { form.setFieldsValue(record); setEditModal(record); }}>编辑</Button>
+          <Button type="link" size="small" onClick={async () => { await loadLeaders(); form.setFieldsValue({ ...record, leaderId: record.leaderId || undefined }); setEditModal(record); }}>编辑</Button>
           <Button type="link" size="small" danger onClick={() => handleDelete(record.id)}>删除</Button>
         </Space>
       ),
@@ -150,7 +160,7 @@ export default function TeamList() {
     <Card title="团队管理">
       <Space style={{ marginBottom: 16 }} wrap>
         <Input placeholder="搜索团队名称" value={keyword} onChange={e => setKeyword(e.target.value)} onPressEnter={loadTeams} style={{ width: 200 }} />
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); setCreateModal(true); }}>新建团队</Button>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => { form.resetFields(); loadLeaders(); setCreateModal(true); }}>新建团队</Button>
       </Space>
       <Table rowKey="id" columns={columns} dataSource={data} loading={loading}
         pagination={{ current: page, total, pageSize: 20, onChange: setPage, showTotal: (t) => `共 ${t} 条` }} />
@@ -159,9 +169,21 @@ export default function TeamList() {
         onOk={editModal ? handleEdit : handleCreate}
         onCancel={() => { setCreateModal(false); setEditModal(null); form.resetFields(); }}>
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label="团队名称" rules={[{ required: true }]}><Input placeholder="请输入团队名称" /></Form.Item>
-          <Form.Item name="description" label="描述"><Input.TextArea rows={3} /></Form.Item>
-          <Form.Item name="leaderName" label="负责人名称"><Input placeholder="负责人名称" /></Form.Item>
+          <Form.Item name="name" label="团队名称" tooltip="团队的显示名称" rules={[{ required: true }]}><Input placeholder="请输入团队名称" /></Form.Item>
+          <Form.Item name="description" label="描述" tooltip="团队的补充说明信息"><Input.TextArea rows={3} /></Form.Item>
+          <Form.Item name="leaderId" label="团队负责人" tooltip="选择角色为团长的用户作为团队负责人，可按企业名搜索">
+            <Select
+              showSearch
+              allowClear
+              placeholder="选择团队负责人（团长角色）"
+              filterOption={false}
+              onSearch={(v) => loadLeaders(v)}
+              options={leaders.map((u: any) => ({
+                label: `${u.companyName ? `${u.companyName} | ` : ''}${u.nickname || u.phone} (${u.phone})`,
+                value: u.id,
+              }))}
+            />
+          </Form.Item>
         </Form>
       </Modal>
 
@@ -183,11 +205,11 @@ export default function TeamList() {
 
       <Modal title="添加成员" open={!!addMemberModal} onOk={handleAddMember} onCancel={() => setAddMemberModal(null)}>
         <Form form={memberForm} layout="vertical">
-          <Form.Item name="userId" label="选择用户" rules={[{ required: true }]}>
+          <Form.Item name="userId" label="选择用户" tooltip="从已注册用户中选择要添加到团队的成员" rules={[{ required: true }]}>
             <Select showSearch placeholder="选择用户" optionFilterProp="label"
               options={users.map((u: any) => ({ label: `${u.nickname || u.phone} (${u.phone})`, value: u.id }))} />
           </Form.Item>
-          <Form.Item name="role" label="角色">
+          <Form.Item name="role" label="角色" tooltip="成员在团队中的角色">
             <Select options={[{ label: '成员', value: 'member' }, { label: '负责人', value: 'leader' }]} />
           </Form.Item>
         </Form>
@@ -195,8 +217,8 @@ export default function TeamList() {
 
       <Modal title="邀请新成员" open={!!inviteModal} onOk={handleInvite} onCancel={() => setInviteModal(null)}>
         <Form form={inviteForm} layout="vertical">
-          <Form.Item name="contact" label="手机号或邮箱" rules={[{ required: true }]}><Input placeholder="输入手机号或邮箱" /></Form.Item>
-          <Form.Item name="userName" label="用户名"><Input placeholder="可选" /></Form.Item>
+          <Form.Item name="contact" label="手机号或邮箱" tooltip="被邀请人的手机号或邮箱" rules={[{ required: true }]}><Input placeholder="输入手机号或邮箱" /></Form.Item>
+          <Form.Item name="userName" label="用户名" tooltip="被邀请人的姓名或昵称（可选）"><Input placeholder="可选" /></Form.Item>
         </Form>
       </Modal>
     </Card>

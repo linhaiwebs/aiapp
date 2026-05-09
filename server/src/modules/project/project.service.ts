@@ -20,7 +20,7 @@ export class ProjectService {
 
   async findAll(page = 1, pageSize = 20) {
     const [items, total] = await this.projectRepository.findAndCount({
-      relations: ['tasks'],
+      relations: ['tasks', 'team'],
       skip: (page - 1) * pageSize,
       take: pageSize,
       order: { createdAt: 'DESC' },
@@ -31,7 +31,7 @@ export class ProjectService {
   async findOne(id: string): Promise<Project> {
     const project = await this.projectRepository.findOne({
       where: { id },
-      relations: ['tasks', 'owner', 'acceptor'],
+      relations: ['tasks', 'owner', 'acceptor', 'team'],
     });
     if (!project) throw new NotFoundException('项目不存在');
     return project;
@@ -39,8 +39,19 @@ export class ProjectService {
 
   async update(id: string, dto: CreateProjectDto): Promise<Project> {
     const project = await this.findOne(id);
+    const oldTeamId = project.teamId;
     Object.assign(project, dto);
-    return this.projectRepository.save(project);
+    const updated = await this.projectRepository.save(project);
+
+    // When teamId changes, sync all tasks under this project to inherit the new teamId
+    if (dto.teamId !== undefined && dto.teamId !== oldTeamId) {
+      await this.taskRepository.update(
+        { projectId: id },
+        { teamId: dto.teamId || null } as any,
+      );
+    }
+
+    return updated;
   }
 
   async remove(id: string): Promise<void> {

@@ -17,6 +17,7 @@ import {
   RealNameVerifyDto,
 } from './dto';
 import { SmsService } from '../sms/sms.service';
+import { RealNameService } from '../real-name/real-name.service';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +29,7 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
     private smsService: SmsService,
+    private realNameService: RealNameService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -224,8 +226,18 @@ export class AuthService {
       throw new BadRequestException('用户资料不存在');
     }
 
-    // In production: call third-party ID verification API
-    // Simplified here
+    // Call MCP real-name verification API
+    const verifyResult = await this.realNameService.verifyIdentity(
+      dto.idCardNumber,
+      dto.realName,
+    );
+
+    if (!verifyResult.match) {
+      profile.verificationStatus = 'rejected' as any;
+      await this.profileRepository.save(profile);
+      throw new BadRequestException(verifyResult.message || '实名认证不通过');
+    }
+
     profile.realName = dto.realName;
     profile.idCardNumber = dto.idCardNumber;
     profile.idCardFrontUrl = dto.idCardFrontUrl ?? '';

@@ -167,8 +167,6 @@ export class TextCollectionService {
   }
 
   async assignTexts(dto: AssignTextDto): Promise<{ assigned: number }> {
-    const task = await this.taskRepository.findOne({ where: { id: dto.textIds?.[0] ? (await this.textRepository.findOne({ where: { id: dto.textIds[0] } }))?.taskId : '' } });
-
     if (dto.autoAssign) {
       // Auto-assign: get all unassigned texts for the task
       const taskId = dto.textIds?.[0]
@@ -177,9 +175,12 @@ export class TextCollectionService {
 
       if (!taskId) throw new BadRequestException('请指定任务ID');
 
-      const unassignedTexts = await this.textRepository.find({
-        where: { taskId, status: TextStatus.PENDING },
-      });
+      const [unassignedTexts, task] = await Promise.all([
+        this.textRepository.find({
+          where: { taskId, status: TextStatus.PENDING },
+        }),
+        this.taskRepository.findOne({ where: { id: taskId } }),
+      ]);
 
       if (unassignedTexts.length === 0) throw new BadRequestException('没有待分配的文本');
 
@@ -190,14 +191,30 @@ export class TextCollectionService {
 
       if (claims.length === 0) throw new BadRequestException('没有可分配的用户');
 
-      const assignCount = dto.assignCount || 0;
-      const perUser = assignCount > 0
-        ? Math.ceil(unassignedTexts.length / assignCount)
-        : Math.ceil(unassignedTexts.length / claims.length);
+      // Determine per-user count:
+      // 1. dto.perUserCount (explicit in request) takes priority
+      // 2. task.textPerUserCount (每人X条 from task config)
+      // 3. dto.assignCount (分配人数, split among N people)
+      // 4. Auto: split equally among all claimants
+      const perUserCount = dto.perUserCount || task?.textPerUserCount || 0;
+      const assignCount = dto.assignCount || task?.textAssignCount || 0;
+      let perUser: number;
+
+      if (perUserCount > 0) {
+        // 每人X条模式：每人分配固定条数
+        perUser = perUserCount;
+      } else if (assignCount > 0) {
+        // 分配人数模式：均分给N个人
+        perUser = Math.ceil(unassignedTexts.length / assignCount);
+      } else {
+        // 自动模式：均分给所有已领取用户
+        perUser = Math.ceil(unassignedTexts.length / claims.length);
+      }
 
       let textIndex = 0;
       for (const claim of claims) {
         const textsForUser = unassignedTexts.slice(textIndex, textIndex + perUser);
+        if (textsForUser.length === 0) break;
         for (const text of textsForUser) {
           text.assignedUserId = claim.userId;
           text.assignedAt = new Date();

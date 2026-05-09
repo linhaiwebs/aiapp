@@ -35,7 +35,7 @@ export class UserService {
     if (status) queryBuilder.andWhere('user.status = :status', { status });
     if (keyword) {
       queryBuilder.andWhere(
-        '(user.phone LIKE :kw OR user.nickname LIKE :kw)',
+        '(user.phone LIKE :kw OR user.nickname LIKE :kw OR user.companyName LIKE :kw)',
         { kw: `%${keyword}%` },
       );
     }

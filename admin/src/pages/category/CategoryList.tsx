@@ -10,6 +10,7 @@ const typeMap: Record<string, { label: string; color: string }> = {
   audio: { label: '语音', color: 'blue' },
   image: { label: '图像', color: 'green' },
   video: { label: '视频', color: 'orange' },
+  text: { label: '文本', color: 'purple' },
 };
 
 export default function CategoryList() {
@@ -170,24 +171,24 @@ export default function CategoryList() {
         destroyOnClose
       >
         <Form form={form} layout="vertical">
-          <Form.Item name="name" label="分类名称" rules={[{ required: true }]}>
+          <Form.Item name="name" label="分类名称" tooltip="分类的显示名称" rules={[{ required: true }]}>
             <Input placeholder="如：普通话语音" />
           </Form.Item>
-          <Form.Item name="code" label="分类编码" rules={[{ required: true }]}>
+          <Form.Item name="code" label="分类编码" tooltip="分类唯一编码，创建后不可修改" rules={[{ required: true }]}>
             <Input placeholder="如：mandarin_audio" disabled={!editModal?.isNew} />
           </Form.Item>
-          <Form.Item name="type" label="类型" rules={[{ required: true }]}>
+          <Form.Item name="type" label="类型" tooltip="该分类适用的任务数据类型" rules={[{ required: true }]}>
             <Select
               options={Object.entries(typeMap).map(([v, { label }]) => ({ label, value: v }))}
             />
           </Form.Item>
-          <Form.Item name="description" label="描述">
+          <Form.Item name="description" label="描述" tooltip="分类的补充说明信息">
             <Input.TextArea rows={3} />
           </Form.Item>
-          <Form.Item name="sortOrder" label="排序（小号在前）">
+          <Form.Item name="sortOrder" label="排序（小号在前）" tooltip="分类在列表中的显示排序，数值越小越靠前">
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name="isActive" label="启用" valuePropName="checked">
+          <Form.Item name="isActive" label="启用" valuePropName="checked" tooltip="控制该分类是否启用">
             <Switch />
           </Form.Item>
         </Form>

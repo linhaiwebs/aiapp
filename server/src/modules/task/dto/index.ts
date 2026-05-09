@@ -80,6 +80,11 @@ export class CreateTaskDto {
   @IsOptional()
   categoryId?: string;
 
+  @ApiProperty({ description: '团队ID（设置后仅团队成员可见）', required: false })
+  @IsString()
+  @IsOptional()
+  teamId?: string;
+
   @ApiProperty({ description: '质检配置', required: false })
   @IsOptional()
   qcConfig?: Record<string, any>;
@@ -172,6 +177,11 @@ export class CreateTaskDto {
   @IsOptional()
   textAssignCount?: number;
 
+  @ApiProperty({ description: '每人分配条数（>0时优先于分配人数）', required: false })
+  @IsNumber()
+  @IsOptional()
+  textPerUserCount?: number;
+
   @ApiProperty({ description: '是否复制多份文本分配', required: false })
   @IsBoolean()
   @IsOptional()
@@ -243,6 +253,10 @@ export class UpdateTaskDto {
   @IsOptional()
   categoryId?: string;
 
+  @IsString()
+  @IsOptional()
+  teamId?: string;
+
   @IsOptional()
   qcConfig?: Record<string, any>;
 
@@ -313,6 +327,10 @@ export class UpdateTaskDto {
   @IsOptional()
   textAssignCount?: number;
 
+  @IsNumber()
+  @IsOptional()
+  textPerUserCount?: number;
+
   @IsBoolean()
   @IsOptional()
   textCopyForAssign?: boolean;
@@ -355,6 +373,10 @@ export class TaskFilterDto {
   @IsString()
   @IsOptional()
   projectId?: string;
+
+  @IsString()
+  @IsOptional()
+  teamId?: string;
 
   @IsString()
   @IsOptional()

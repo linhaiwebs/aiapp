@@ -16,7 +16,6 @@ class ProfilePage extends ConsumerStatefulWidget {
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
   UserModel? _user;
-  bool _isLoading = true;
 
   @override
   void initState() {
@@ -25,21 +24,23 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Future<void> _loadUser() async {
-    // Try loading cached user first
     final authStorage = ref.read(authStorageProvider);
     final cached = await authStorage.getUser();
     if (cached != null && mounted) {
-      setState(() { _user = cached; _isLoading = false; });
+      setState(() {
+        _user = cached;
+      });
     }
-    // Then refresh from API
     try {
       final user = await ref.read(authServiceProvider).getMe();
       if (mounted) {
         await authStorage.saveUser(user);
-        setState(() { _user = user; _isLoading = false; });
+        setState(() {
+          _user = user;
+        });
       }
     } catch (_) {
-      if (mounted && _user == null) setState(() => _isLoading = false);
+      // Use cached data if network fails
     }
   }
 
@@ -48,310 +49,684 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final balance = _user?.balance ?? 0;
     final frozenBalance = _user?.frozenBalance ?? 0;
     final totalEarnings = _user?.totalEarnings ?? 0;
-    final qualityScore = _user?.qualityScore ?? 100;
     final isVerified = _user?.isRealNameVerified ?? false;
+    final nickname = _user?.nickname ?? '用户';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
+      backgroundColor: AppColors.background,
       body: RefreshIndicator(
         onRefresh: _loadUser,
         color: AppColors.primary,
         child: CustomScrollView(
           slivers: [
-            // Top bar
+            // ── Header: surface → primary/5% gradient ──
             SliverToBoxAdapter(
-              child: Container(
-                padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 8.h, left: 20.w, right: 20.w, bottom: 12.h),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  border: Border(bottom: BorderSide(color: const Color(0xFFF3F4F6), width: 0.5)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      width: 40.w, height: 40.w,
-                      decoration: BoxDecoration(color: const Color(0xFFF9FAFB), shape: BoxShape.circle),
-                      child: Icon(Icons.menu, size: 20.sp, color: Colors.grey),
-                    ),
-                    Text('端云智采', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: AppColors.onBackground)),
-                    Container(
-                      width: 40.w, height: 40.w,
-                      decoration: BoxDecoration(color: const Color(0xFFF9FAFB), shape: BoxShape.circle, border: Border.all(color: const Color(0xFFF3F4F6))),
-                      child: Icon(Icons.cloud_sync_outlined, size: 20.sp, color: AppColors.primary),
-                    ),
-                  ],
-                ),
+              child: _buildHeader(
+                context,
+                nickname,
+                balance,
+                totalEarnings,
+                isVerified,
               ),
             ),
+
+            // ── Content ──
             SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 24.h),
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.layoutMargin.w,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Greeting
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _user != null ? '您好，${_user!.displayName}' : '您好',
-                                style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w600, color: AppColors.onBackground, letterSpacing: -0.5),
-                              ),
-                              SizedBox(height: 4.h),
-                              Text(
-                                '${_user?.roleLabel ?? "采集员"} · ${isVerified ? "已实名" : "未实名"}',
-                                style: TextStyle(fontSize: 14.sp, color: const Color(0xFF6B7280)),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (!isVerified)
-                          TextButton(
-                            onPressed: () => context.push('/real-name'),
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                              backgroundColor: AppColors.primary.withValues(alpha: 0.08),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-                            ),
-                            child: Text('去认证', style: TextStyle(fontSize: 13.sp, color: AppColors.primary, fontWeight: FontWeight.w600)),
-                          ),
-                      ],
-                    ),
-                    SizedBox(height: 24.h),
+                    SizedBox(height: AppSpacing.md.h),
 
                     // Wallet card
-                    Container(
-                      padding: EdgeInsets.all(24.w),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(color: const Color(0xFFF3F4F6)),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 30, offset: const Offset(0, 8))],
-                      ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('总余额', style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6B7280), fontWeight: FontWeight.w500, letterSpacing: 1)),
-                              Icon(Icons.account_balance_wallet, size: 20.sp, color: AppColors.primary),
-                            ],
-                          ),
-                          SizedBox(height: 8.h),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: _buildPriceDisplay(balance),
-                          ),
-                          SizedBox(height: 8.h),
-                          Row(
-                            children: [
-                              Text('冻结: ¥${frozenBalance.toStringAsFixed(2)}', style: TextStyle(fontSize: 12.sp, color: const Color(0xFF9CA3AF))),
-                              SizedBox(width: 16.w),
-                              Text('累计: ¥${totalEarnings.toStringAsFixed(2)}', style: TextStyle(fontSize: 12.sp, color: const Color(0xFF9CA3AF))),
-                            ],
-                          ),
-                          SizedBox(height: 16.h),
-                          Row(children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () {},
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-                                  padding: EdgeInsets.symmetric(vertical: 12.h),
-                                ),
-                                child: Text('充值', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w500)),
-                              ),
-                            ),
-                            SizedBox(width: 16.w),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () {},
-                                style: OutlinedButton.styleFrom(
-                                  side: const BorderSide(color: Color(0xFFE5E7EB)),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-                                  padding: EdgeInsets.symmetric(vertical: 12.h),
-                                  backgroundColor: Colors.white,
-                                ),
-                                child: Text('提现', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w500, color: AppColors.onBackground)),
-                              ),
-                            ),
-                          ]),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 16.h),
+                    _buildWalletCard(balance, frozenBalance, totalEarnings),
+                    SizedBox(height: AppSpacing.lg.h),
 
-                    // Quality score
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: EdgeInsets.all(20.w),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16.r),
-                              border: Border.all(color: const Color(0xFFF3F4F6)),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 30, offset: const Offset(0, 8))],
-                            ),
-                            child: Column(
-                              children: [
-                                Align(alignment: Alignment.centerLeft, child: Text('质量分', style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6B7280), fontWeight: FontWeight.w500, letterSpacing: 1))),
-                                SizedBox(height: 16.h),
-                                SizedBox(
-                                  width: 100.w, height: 100.w,
-                                  child: Stack(
-                                    children: [
-                                      CircularProgressIndicator(
-                                        value: qualityScore / 100,
-                                        strokeWidth: 10.w,
-                                        backgroundColor: const Color(0xFFF3F4F6),
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                          qualityScore >= 80 ? AppColors.secondary : qualityScore >= 60 ? AppColors.orange : AppColors.error,
-                                        ),
-                                      ),
-                                      Center(
-                                        child: RichText(text: TextSpan(children: [
-                                          TextSpan(text: qualityScore.toStringAsFixed(0), style: TextStyle(fontSize: 24.sp, fontWeight: FontWeight.w600, color: AppColors.onBackground)),
-                                          TextSpan(text: '分', style: TextStyle(fontSize: 14.sp, color: const Color(0xFF6B7280))),
-                                        ])),
-                                      ),
-                                    ],
+                    // ── 账户 ──
+                    _sectionTitle('账户'),
+                    SizedBox(height: AppSpacing.sm.h),
+                    _buildMenuCard([
+                      _MenuItem(
+                        icon: Icons.person_outline,
+                        title: '个人信息',
+                        subtitle: '查看和编辑个人资料',
+                        onTap: () {},
+                      ),
+                      _MenuItem(
+                        icon: Icons.verified_user_outlined,
+                        title: '实名认证',
+                        subtitle: isVerified ? '已认证' : '未认证',
+                        trailing: isVerified
+                            ? Icon(Icons.check_circle,
+                                size: 18.sp, color: AppColors.secondary)
+                            : Container(
+                                padding: EdgeInsets.symmetric(
+                                    horizontal: 8.w, vertical: 2.h),
+                                decoration: BoxDecoration(
+                                  color: AppColors.orange
+                                      .withValues(alpha: 0.1),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.sm),
+                                ),
+                                child: Text(
+                                  '未认证',
+                                  style: TextStyle(
+                                    fontSize: 11.sp,
+                                    color: AppColors.orange,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 16.w),
-                        Expanded(
-                          child: Container(
-                            padding: EdgeInsets.all(20.w),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16.r),
-                              border: Border.all(color: const Color(0xFFF3F4F6)),
-                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 30, offset: const Offset(0, 8))],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                                  Text('实名认证', style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6B7280), fontWeight: FontWeight.w500, letterSpacing: 1)),
-                                  Icon(isVerified ? Icons.verified : Icons.warning_amber, size: 20.sp, color: isVerified ? AppColors.secondary : AppColors.orange),
-                                ]),
-                                SizedBox(height: 24.h),
-                                Text(isVerified ? '已认证' : '未认证', style: TextStyle(fontSize: 32.sp, fontWeight: FontWeight.w600, color: isVerified ? AppColors.secondary : AppColors.orange, letterSpacing: -2)),
-                                SizedBox(height: 12.h),
-                                if (!isVerified)
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      onPressed: () => context.push('/real-name'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primary,
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-                                        padding: EdgeInsets.symmetric(vertical: 8.h),
-                                      ),
-                                      child: Text('去认证', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w500)),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 24.h),
-
-                    // Settings list
-                    Text('偏好与支持', style: TextStyle(fontSize: 12.sp, color: const Color(0xFF6B7280), fontWeight: FontWeight.w500, letterSpacing: 1.5)),
-                    SizedBox(height: 8.h),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16.r),
-                        border: Border.all(color: const Color(0xFFF3F4F6)),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 30, offset: const Offset(0, 8))],
+                              ),
+                        onTap: isVerified
+                            ? null
+                            : () => context.push('/real-name'),
                       ),
-                      child: Column(children: [
-                        _settingsItem(Icons.dns_outlined, '服务器设置', onTap: () => context.push('/api-settings')),
-                        _settingsItem(Icons.security, '账号安全', onTap: () {}),
-                        _settingsItem(Icons.notifications_active, '通知设置', onTap: () {}),
-                        _settingsItem(Icons.help_outline, '帮助中心', onTap: () {}),
-                        _settingsItem(Icons.info_outline, '关于端云智采', showBorder: false, onTap: () {}),
-                      ]),
-                    ),
-                    SizedBox(height: 16.h),
-
-                    // Logout
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () async {
-                          final storage = ref.read(authStorageProvider);
-                          await storage.clearAll();
-                          if (context.mounted) context.go('/login');
-                        },
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-                          padding: EdgeInsets.symmetric(vertical: 14.h),
-                        ),
-                        child: Text('退出登录', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w500, color: AppColors.error)),
+                      _MenuItem(
+                        icon: Icons.security_outlined,
+                        title: '账户安全',
+                        subtitle: '修改密码，保护账号',
+                        showDivider: false,
+                        onTap: () {},
                       ),
-                    ),
+                    ]),
+
+                    SizedBox(height: AppSpacing.md.h),
+
+                    // ── 数据 ──
+                    _sectionTitle('数据'),
+                    SizedBox(height: AppSpacing.sm.h),
+                    _buildMenuCard([
+                      _MenuItem(
+                        icon: Icons.history_outlined,
+                        title: '任务记录',
+                        subtitle: '查看已领取和已完成的任务',
+                        onTap: () => context.push('/my-tasks'),
+                      ),
+                      _MenuItem(
+                        icon: Icons.bar_chart_outlined,
+                        title: '数据导出',
+                        subtitle: '导出任务和采集数据',
+                        showDivider: false,
+                        onTap: () => context.push('/data-export'),
+                      ),
+                    ]),
+
+                    SizedBox(height: AppSpacing.md.h),
+
+                    // ── 设置 ──
+                    _sectionTitle('设置'),
+                    SizedBox(height: AppSpacing.sm.h),
+                    _buildMenuCard([
+                      _MenuItem(
+                        icon: Icons.settings_outlined,
+                        title: '设置',
+                        subtitle: '应用设置与偏好',
+                        onTap: () {},
+                      ),
+                      _MenuItem(
+                        icon: Icons.info_outline,
+                        title: '关于',
+                        subtitle: '端云智采 v1.0.0',
+                        showDivider: false,
+                        onTap: () {},
+                      ),
+                    ]),
+
+                    SizedBox(height: AppSpacing.md.h),
+
+                    // ── Logout ──
+                    _buildLogoutButton(),
+
+                    SizedBox(height: 100.h),
                   ],
                 ),
               ),
             ),
-            SliverToBoxAdapter(child: SizedBox(height: 100.h)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildPriceDisplay(double value) {
-    final intPart = value.truncate().toString();
-    final decPart = (value - value.truncate()).abs().toStringAsFixed(2).substring(1);
-    return RichText(text: TextSpan(children: [
-      TextSpan(text: '¥$intPart', style: TextStyle(fontSize: 48.sp, fontWeight: FontWeight.w600, color: AppColors.onBackground, letterSpacing: -2)),
-      TextSpan(text: decPart, style: TextStyle(fontSize: 48.sp, fontWeight: FontWeight.w600, color: const Color(0xFF9CA3AF), letterSpacing: -2)),
-    ]));
+  // ──────────────────────────────────────────────
+  // Header
+  // ──────────────────────────────────────────────
+
+  Widget _buildHeader(
+    BuildContext context,
+    String nickname,
+    double balance,
+    double totalEarnings,
+    bool isVerified,
+  ) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+        20.w,
+        MediaQuery.of(context).padding.top + 20.h,
+        20.w,
+        28.h,
+      ),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.surface,
+            AppColors.primary.withValues(alpha: 0.05),
+          ],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Avatar + name row
+          Row(
+            children: [
+              // Avatar circle
+              Container(
+                width: 64.w,
+                height: 64.w,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.25),
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    nickname.substring(0, 1).toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 26.sp,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: 16.w),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _user != null ? _user!.displayName : '用户',
+                      style: TextStyle(
+                        fontSize: 20.sp,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    SizedBox(height: 4.h),
+                    Text(
+                      _user?.phone.replaceRange(3, 7, '****') ?? '',
+                      style: TextStyle(
+                        fontSize: 13.sp,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    SizedBox(height: 8.h),
+                    Row(
+                      children: [
+                        _roleBadge(_user?.role),
+                        SizedBox(width: 8.w),
+                        if (isVerified) _verifiedBadge(),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () => context.push('/data-export'),
+                icon: Icon(
+                  Icons.settings_outlined,
+                  size: 22.sp,
+                  color: AppColors.onSurfaceVariant,
+                ),
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.surfaceContainerHigh,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 20.h),
+
+          // Stats row (inline in header)
+          Row(
+            children: [
+              _headerStat('余额', '¥${balance.toStringAsFixed(0)}'),
+              _headerStatDivider(),
+              _headerStat('已完成', '0个'),
+              _headerStatDivider(),
+              _headerStat('总收入', '¥${totalEarnings.toStringAsFixed(0)}'),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
-  Widget _settingsItem(IconData icon, String title, {bool showBorder = true, VoidCallback? onTap}) {
+  Widget _headerStat(String label, String value) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 17.sp,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+          SizedBox(height: 2.h),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.sp,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerStatDivider() {
+    return Container(
+      width: 1,
+      height: 28.h,
+      color: AppColors.outlineVariant,
+    );
+  }
+
+  // ──────────────────────────────────────────────
+  // Wallet card
+  // ──────────────────────────────────────────────
+
+  Widget _buildWalletCard(double balance, double frozen, double total) {
+    return Container(
+      padding: EdgeInsets.all(AppSpacing.cardPadding.w),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: AppColors.outlineVariant, width: 1),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Wallet icon + title
+          Row(
+            children: [
+              Container(
+                width: 36.w,
+                height: 36.w,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                ),
+                child: Icon(
+                  Icons.account_balance_wallet_outlined,
+                  size: 20.sp,
+                  color: AppColors.primary,
+                ),
+              ),
+              SizedBox(width: 10.w),
+              Text(
+                '我的钱包',
+                style: TextStyle(
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: AppSpacing.md.h),
+
+          // Balance
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '¥${balance.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontSize: 28.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+              SizedBox(width: 6.w),
+              Padding(
+                padding: EdgeInsets.only(bottom: 4.h),
+                child: Text(
+                  '余额',
+                  style: TextStyle(
+                    fontSize: 13.sp,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: AppSpacing.md.h),
+
+          // Frozen + total earnings
+          Row(
+            children: [
+              _walletSub('冻结', frozen),
+              SizedBox(width: AppSpacing.lg.w),
+              _walletSub('累计收益', total),
+            ],
+          ),
+          SizedBox(height: AppSpacing.md.h),
+
+          // Action buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: AppColors.onPrimary,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                  ),
+                  child: Text(
+                    '充值',
+                    style: TextStyle(
+                        fontSize: 14.sp, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              SizedBox(width: AppSpacing.dataGutter.w),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {},
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                        color: AppColors.outlineVariant, width: 1),
+                    foregroundColor: AppColors.onSurface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                    ),
+                    padding: EdgeInsets.symmetric(vertical: 12.h),
+                  ),
+                  child: Text(
+                    '提现',
+                    style: TextStyle(
+                        fontSize: 14.sp, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _walletSub(String label, double amount) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style:
+              TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
+        ),
+        SizedBox(width: 4.w),
+        Text(
+          '¥${amount.toStringAsFixed(2)}',
+          style: TextStyle(
+            fontSize: 12.sp,
+            color: AppColors.onSurface,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ──────────────────────────────────────────────
+  // Header badges (preserved)
+  // ──────────────────────────────────────────────
+
+  Widget _roleBadge(UserRole? role) {
+    final r = role ?? UserRole.member;
+    final label = r.label;
+    final color = switch (r) {
+      UserRole.leader => AppColors.orange,
+      UserRole.superAdmin => AppColors.error,
+      _ => AppColors.secondary,
+    };
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11.sp,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _verifiedBadge() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.verified, size: 12.sp, color: AppColors.secondary),
+          SizedBox(width: 4.w),
+          Text(
+            '已实名',
+            style: TextStyle(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w600,
+              color: AppColors.secondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ──────────────────────────────────────────────
+  // Menu section helpers
+  // ──────────────────────────────────────────────
+
+  Widget _sectionTitle(String title) {
+    return Padding(
+      padding: EdgeInsets.only(left: 4.w),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 12.sp,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.2,
+          color: AppColors.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuCard(List<Widget> items) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.outlineVariant, width: 1),
+      ),
+      child: Column(children: items),
+    );
+  }
+
+  // ──────────────────────────────────────────────
+  // Logout button
+  // ──────────────────────────────────────────────
+
+  Widget _buildLogoutButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () async {
+          final storage = ref.read(authStorageProvider);
+          await storage.clearAll();
+          if (!mounted) return;
+          context.go('/login');
+        },
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.error,
+          side: BorderSide(
+            color: AppColors.error.withValues(alpha: 0.3),
+            width: 1,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          padding: EdgeInsets.symmetric(vertical: 14.h),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.logout, size: 18.sp),
+            SizedBox(width: 8.w),
+            Text(
+              '退出登录',
+              style:
+                  TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════
+// Menu item widget
+// ═══════════════════════════════════════════════
+
+class _MenuItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+  final bool showDivider;
+  final bool isDestructive;
+  final VoidCallback? onTap;
+
+  const _MenuItem({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.showDivider = true,
+    this.isDestructive = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final iconBgColor = isDestructive
+        ? AppColors.error.withValues(alpha: 0.08)
+        : AppColors.primary.withValues(alpha: 0.08);
+    final iconColor =
+        isDestructive ? AppColors.error : AppColors.primary;
+    final titleColor = isDestructive
+        ? AppColors.error
+        : onTap == null
+            ? AppColors.onSurfaceVariant
+            : AppColors.onSurface;
+
     return Column(
       children: [
         InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.md),
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+            padding: EdgeInsets.symmetric(
+              horizontal: AppSpacing.cardPadding.w,
+              vertical: AppSpacing.cardPadding.h,
+            ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(children: [
-                  Container(
-                    width: 40.w, height: 40.w,
-                    decoration: BoxDecoration(color: const Color(0xFFF9FAFB), shape: BoxShape.circle, border: Border.all(color: const Color(0xFFF3F4F6))),
-                    child: Icon(icon, size: 20.sp, color: const Color(0xFF6B7280)),
+                // Icon circle
+                Container(
+                  width: 40.w,
+                  height: 40.w,
+                  decoration: BoxDecoration(
+                    color: iconBgColor,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
-                  SizedBox(width: 16.w),
-                  Text(title, style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w400, color: AppColors.onBackground)),
-                ]),
-                Icon(Icons.chevron_right, size: 20.sp, color: const Color(0xFFD1D5DB)),
+                  child: Icon(icon, size: 20.sp, color: iconColor),
+                ),
+                SizedBox(width: 14.w),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15.sp,
+                          fontWeight: FontWeight.w500,
+                          color: titleColor,
+                        ),
+                      ),
+                      if (subtitle != null && subtitle!.isNotEmpty) ...[
+                        SizedBox(height: 2.h),
+                        Text(
+                          subtitle!,
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (trailing != null)
+                  trailing!
+                else if (onTap != null && !isDestructive)
+                  Icon(Icons.chevron_right,
+                      size: 20.sp, color: AppColors.outline),
               ],
             ),
           ),
         ),
-        if (showBorder) Padding(padding: EdgeInsets.only(left: 72.w), child: Divider(color: const Color(0xFFF9FAFB), height: 1)),
+        if (showDivider)
+          Padding(
+            padding: EdgeInsets.only(left: 78.w),
+            child: const Divider(
+              color: AppColors.separator,
+              height: 1,
+              thickness: 1,
+            ),
+          ),
       ],
     );
   }

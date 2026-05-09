@@ -59,6 +59,11 @@ export class AssignTextDto {
   @IsOptional()
   assignCount?: number;
 
+  @ApiProperty({ description: '每人分配条数（>0时优先于分配人数）', required: false })
+  @IsNumber()
+  @IsOptional()
+  perUserCount?: number;
+
   @ApiProperty({ description: '是否复制多份分配', required: false })
   @IsBoolean()
   @IsOptional()

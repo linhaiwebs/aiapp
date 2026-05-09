@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, In } from 'typeorm';
-import { Task, TaskClaim, TaskStatus, ClaimStatus, User, UserStatus } from '../../entities';
+import { Task, TaskClaim, TaskStatus, ClaimStatus, User, UserStatus, TeamMember, Project } from '../../entities';
 import { CreateTaskDto, UpdateTaskDto, TaskFilterDto } from './dto';
 
 @Injectable()
@@ -18,12 +18,25 @@ export class TaskService {
     private claimRepository: Repository<TaskClaim>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(TeamMember)
+    private teamMemberRepository: Repository<TeamMember>,
+    @InjectRepository(Project)
+    private projectRepository: Repository<Project>,
   ) {}
 
   async create(dto: CreateTaskDto): Promise<Task> {
     const cleanDto = Object.fromEntries(
       Object.entries(dto).filter(([, v]) => v !== null && v !== undefined),
     );
+
+    // Auto-inherit teamId from project when not explicitly set
+    if (cleanDto.projectId && !cleanDto.teamId) {
+      const project = await this.projectRepository.findOne({ where: { id: cleanDto.projectId } });
+      if (project?.teamId) {
+        cleanDto.teamId = project.teamId;
+      }
+    }
+
     // Remove audio-specific fields for non-audio types to avoid enum validation issues
     if (cleanDto.type !== 'audio') {
       delete cleanDto.audioFormat;
@@ -75,6 +88,7 @@ export class TaskService {
     if (language) queryBuilder.andWhere('task.language = :language', { language });
     if (categoryId) queryBuilder.andWhere('task.categoryId = :categoryId', { categoryId });
     if (projectId) queryBuilder.andWhere('task.projectId = :projectId', { projectId });
+    if (filter.teamId) queryBuilder.andWhere('task.teamId = :teamId', { teamId: filter.teamId });
     if (keyword) {
       queryBuilder.andWhere(
         '(task.title LIKE :keyword OR task.description LIKE :keyword)',
@@ -95,7 +109,7 @@ export class TaskService {
   async findOne(id: string): Promise<Task> {
     const task = await this.taskRepository.findOne({
       where: { id },
-      relations: ['category', 'project', 'requirements', 'samples'],
+      relations: ['category', 'project', 'team', 'requirements', 'samples'],
     });
     if (!task) throw new NotFoundException('任务不存在');
     return task;
@@ -113,6 +127,19 @@ export class TaskService {
   async remove(id: string): Promise<void> {
     const task = await this.findOne(id);
     await this.taskRepository.remove(task);
+  }
+
+  async batchRemove(ids: string[]): Promise<void> {
+    if (!ids?.length) throw new BadRequestException('请提供要删除的ID列表');
+    await this.taskRepository.delete(ids);
+  }
+
+  async batchUpdateStatus(ids: string[], status: TaskStatus): Promise<void> {
+    if (!ids?.length) throw new BadRequestException('请提供要操作的ID列表');
+    if (!Object.values(TaskStatus).includes(status)) {
+      throw new BadRequestException('无效的任务状态');
+    }
+    await this.taskRepository.update(ids, { status });
   }
 
   /** 采集员申请任务（需审核员审批） */
@@ -136,6 +163,16 @@ export class TaskService {
     const userScore = Number(user.qualityScore) || 0;
     if (minScore > userScore) {
       throw new ForbiddenException('质量分不足，无法申请此任务');
+    }
+
+    // Check team membership if task is team-scoped
+    if (task.teamId) {
+      const membership = await this.teamMemberRepository.findOne({
+        where: { teamId: task.teamId, userId },
+      });
+      if (!membership) {
+        throw new ForbiddenException('仅团队成员可领取此任务');
+      }
     }
 
     const remaining = Number(task.totalQuantity) - Number(task.claimedQuantity);

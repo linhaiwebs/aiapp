@@ -58,6 +58,7 @@ class TaskModel {
   final Map<String, dynamic>? typeConfig;
   final String? projectId;
   final String? categoryId;
+  final String? teamId;
   final int sortOrder;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -79,6 +80,7 @@ class TaskModel {
   final int reviewRounds;
   final int recycleHours;
   final int textAssignCount;
+  final int textPerUserCount;
   final bool textCopyForAssign;
 
   const TaskModel({
@@ -103,6 +105,7 @@ class TaskModel {
     this.typeConfig,
     this.projectId,
     this.categoryId,
+    this.teamId,
     this.sortOrder = 0,
     required this.createdAt,
     required this.updatedAt,
@@ -122,6 +125,7 @@ class TaskModel {
     this.reviewRounds = 1,
     this.recycleHours = 48,
     this.textAssignCount = 0,
+    this.textPerUserCount = 0,
     this.textCopyForAssign = false,
   });
 
@@ -155,6 +159,7 @@ class TaskModel {
         typeConfig: json['typeConfig'] as Map<String, dynamic>?,
         projectId: json['projectId'] as String?,
         categoryId: json['categoryId'] as String?,
+        teamId: json['teamId'] as String?,
         sortOrder: _toInt(json['sortOrder']),
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
@@ -174,6 +179,7 @@ class TaskModel {
         reviewRounds: _toInt(json['reviewRounds'], 1),
         recycleHours: _toInt(json['recycleHours'], 48),
         textAssignCount: _toInt(json['textAssignCount']),
+        textPerUserCount: _toInt(json['textPerUserCount']),
         textCopyForAssign: json['textCopyForAssign'] as bool? ?? false,
       );
 

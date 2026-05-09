@@ -11,35 +11,44 @@ import '../../features/task/pages/task_detail_page.dart';
 import '../../features/collection/pages/my_tasks_page.dart';
 import '../../features/collection/pages/collection_workbench_page.dart';
 import '../../features/collection/pages/text_collection_page.dart';
+import '../../features/task/pages/task_create_page.dart';
 import '../../features/profile/pages/profile_page.dart';
-import '../../features/profile/pages/api_settings_page.dart';
 import '../../features/profile/pages/data_export_page.dart';
 import '../../features/team/pages/team_list_page.dart';
+import '../../features/team/pages/team_detail_page.dart';
 import '../../shared/widgets/main_shell.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Android-native slide-up page transition
+Page _slidePage(Widget child, GoRouterState state) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.08),
+          end: Offset.zero,
+        ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(animation),
+        child: FadeTransition(
+          opacity: animation,
+          child: child,
+        ),
+      );
+    },
+  );
+}
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/splash',
     routes: [
-      GoRoute(
-        path: '/splash',
-        builder: (context, state) => const SplashPage(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginPage(),
-      ),
-      GoRoute(
-        path: '/register',
-        builder: (context, state) => const RegisterPage(),
-      ),
-      GoRoute(
-        path: '/real-name',
-        builder: (context, state) => const RealNamePage(),
-      ),
+      GoRoute(path: '/splash', pageBuilder: (context, state) => _slidePage(const SplashPage(), state)),
+      GoRoute(path: '/login', pageBuilder: (context, state) => _slidePage(const LoginPage(), state)),
+      GoRoute(path: '/register', pageBuilder: (context, state) => _slidePage(const RegisterPage(), state)),
+      GoRoute(path: '/real-name', pageBuilder: (context, state) => _slidePage(const RealNamePage(), state)),
       ShellRoute(
         builder: (context, state, child) {
           final path = state.uri.path;
@@ -47,61 +56,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return MainShell(currentIndex: index, child: child);
         },
         routes: [
-          GoRoute(
-            path: '/home',
-            builder: (context, state) => const HomePage(),
-          ),
-          GoRoute(
-            path: '/tasks',
-            builder: (context, state) => const TaskSquarePage(),
-          ),
-          GoRoute(
-            path: '/teams',
-            builder: (context, state) => const TeamListPage(),
-          ),
-          GoRoute(
-            path: '/profile',
-            builder: (context, state) => const ProfilePage(),
-          ),
+          GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+          GoRoute(path: '/tasks', builder: (context, state) => const TaskSquarePage()),
+          GoRoute(path: '/teams', builder: (context, state) => const TeamListPage()),
+          GoRoute(path: '/profile', builder: (context, state) => const ProfilePage()),
         ],
       ),
-      GoRoute(
-        path: '/tasks/:id',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => TaskDetailPage(
-          taskId: state.pathParameters['id']!,
-        ),
-      ),
-      GoRoute(
-        path: '/my-tasks',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const MyTasksPage(),
-      ),
-      GoRoute(
-        path: '/collection/:claimId',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => CollectionWorkbenchPage(
-          claimId: state.pathParameters['claimId']!,
-        ),
-      ),
-      GoRoute(
-        path: '/api-settings',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const ApiSettingsPage(),
-      ),
-      GoRoute(
-        path: '/data-export',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const DataExportPage(),
-      ),
-      GoRoute(
-        path: '/text-collection/:taskId',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => TextCollectionPage(
-          taskId: state.pathParameters['taskId']!,
-        ),
-      ),
+      GoRoute(path: '/tasks/:id', pageBuilder: (context, state) => _slidePage(TaskDetailPage(taskId: state.pathParameters['id']!), state)),
+      GoRoute(path: '/tasks/create', pageBuilder: (context, state) => _slidePage(const TaskCreatePage(), state)),
+      GoRoute(path: '/my-tasks', pageBuilder: (context, state) => _slidePage(const MyTasksPage(), state)),
+      GoRoute(path: '/teams/:id', pageBuilder: (context, state) => _slidePage(TeamDetailPage(teamId: state.pathParameters['id']!), state)),
+      GoRoute(path: '/collection/:claimId', pageBuilder: (context, state) => _slidePage(CollectionWorkbenchPage(claimId: state.pathParameters['claimId']!), state)),
+      GoRoute(path: '/data-export', pageBuilder: (context, state) => _slidePage(const DataExportPage(), state)),
+      GoRoute(path: '/text-collection/:taskId', pageBuilder: (context, state) => _slidePage(TextCollectionPage(taskId: state.pathParameters['taskId']!), state)),
     ],
   );
 });
-

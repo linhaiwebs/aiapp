@@ -23,8 +23,9 @@ class XcaiApp extends ConsumerWidget {
         return MaterialApp.router(
           title: '端云智采',
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
+          theme: AppTheme.darkTheme,
           darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeMode.dark,
           routerConfig: router,
         );
       },

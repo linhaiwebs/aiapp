@@ -18,7 +18,8 @@ import {
 import { TaskService } from './task.service';
 import { CreateTaskDto, UpdateTaskDto, TaskFilterDto } from './dto';
 import { CurrentUser, Roles } from '../../common/decorators';
-import { UserRole } from '../../entities';
+import { UserRole, TaskStatus } from '../../entities';
+import { TeamLeaderGuard } from '../../common/guards/team-leader.guard';
 
 @ApiTags('任务')
 @Controller('tasks')
@@ -46,7 +47,7 @@ export class TaskController {
   @Get('claims/pending')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '待审批的任务申请' })
   async getPendingClaims(
     @Query('taskId') taskId?: string,
@@ -71,7 +72,7 @@ export class TaskController {
   @Post()
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '创建任务' })
   async create(@Body() dto: CreateTaskDto) {
     return this.taskService.create(dto);
@@ -80,7 +81,7 @@ export class TaskController {
   @Patch(':id')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '更新任务' })
   async update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
     return this.taskService.update(id, dto);
@@ -123,7 +124,7 @@ export class TaskController {
   @Post('claims/:claimId/approve')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '审批通过任务申请' })
   async approveClaim(
     @Param('claimId') claimId: string,
@@ -135,7 +136,7 @@ export class TaskController {
   @Post('claims/:claimId/reject')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '拒绝任务申请' })
   async rejectClaim(
     @Param('claimId') claimId: string,
@@ -152,5 +153,28 @@ export class TaskController {
   @ApiOperation({ summary: '清除所有任务数据' })
   async clearAllData() {
     return this.taskService.clearAllTaskData();
+  }
+
+  @Post('batch-delete')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @UseGuards(TeamLeaderGuard)
+  @ApiOperation({ summary: '批量删除任务' })
+  async batchRemove(@Body('ids') ids: string[]) {
+    await this.taskService.batchRemove(ids);
+    return { success: true };
+  }
+
+  @Post('batch-status')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @UseGuards(TeamLeaderGuard)
+  @ApiOperation({ summary: '批量修改任务状态' })
+  async batchUpdateStatus(
+    @Body('ids') ids: string[],
+    @Body('status') status: string,
+  ) {
+    await this.taskService.batchUpdateStatus(ids, status as TaskStatus);
+    return { success: true };
   }
 }

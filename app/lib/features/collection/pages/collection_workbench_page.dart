@@ -260,63 +260,107 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
 
   bool get _canSubmit => _collectedFiles.isNotEmpty && !_isSubmitting && !_isUploading;
 
+  int get _totalRequired => 10; // fallback target
+
+  // ─── UI ───────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: AppColors.background,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : SafeArea(
               child: Column(
                 children: [
-                  _buildTopBar(),
+                  _buildStatsBar(),
                   Expanded(
                     child: _collectedFiles.isEmpty
-                        ? _buildEmptyState()
-                        : _buildFileList(),
+                        ? Center(
+                            child: SingleChildScrollView(
+                              padding: EdgeInsets.symmetric(horizontal: 16.w),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _buildRecordSection(),
+                                  SizedBox(height: 32.h),
+                                  _buildEmptyHint(),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              _buildCompactRecordSection(),
+                              Expanded(child: _buildFileList()),
+                            ],
+                          ),
                   ),
-                  _buildControls(),
+                  _buildSubmitBar(),
                 ],
               ),
             ),
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildStatsBar() {
+    final collected = _collectedFiles.length;
+    final previousSubmitted = _claim?.submittedCount ?? 0;
+    final totalSubmitted = previousSubmitted + collected;
+    final progress = previousSubmitted > 0
+        ? (totalSubmitted / (previousSubmitted + _totalRequired)).clamp(0.0, 1.0)
+        : (collected / _totalRequired).clamp(0.0, 1.0);
+
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceContainer,
+        border: Border(bottom: BorderSide(color: AppColors.outlineVariant)),
       ),
       child: Row(
         children: [
           GestureDetector(
             onTap: () => context.pop(),
-            child: Icon(Icons.close, size: 24.sp, color: Colors.white70),
+            child: Icon(Icons.arrow_back_ios_new, size: 20.sp, color: AppColors.onSurfaceVariant),
           ),
           SizedBox(width: 12.w),
           Expanded(
-            child: Text(
-              _claim?.taskTitle ?? '语音采集',
-              style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: Colors.white),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
-            decoration: BoxDecoration(
-              color: _isRecording ? Colors.red.withValues(alpha: 0.2) : AppColors.primary.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12.r),
-            ),
-            child: Text(
-              _isRecording ? '录音中' : '就绪',
-              style: TextStyle(
-                fontSize: 11.sp,
-                color: _isRecording ? Colors.redAccent : AppColors.primary,
-                fontWeight: FontWeight.w600,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _claim?.taskTitle ?? '语音采集',
+                  style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                SizedBox(height: 4.h),
+                Row(
+                  children: [
+                    Text(
+                      '已采集 $totalSubmitted 份',
+                      style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
+                    ),
+                    SizedBox(width: 8.w),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2.r),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 4.h,
+                          backgroundColor: AppColors.outlineVariant,
+                          valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: 8.w),
+                    Text(
+                      '${(progress * 100).toInt()}%',
+                      style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w600, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -324,16 +368,165 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
     );
   }
 
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
+  Widget _buildRecordSection() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(height: 24.h),
+        _buildRecordButton(),
+        SizedBox(height: 20.h),
+        if (_isRecording) _buildTimerDisplay(),
+        if (_isRecording)
+          Padding(
+            padding: EdgeInsets.only(top: 8.h),
+            child: Text(
+              '录音中... 点击按钮停止',
+              style: TextStyle(fontSize: 12.sp, color: AppColors.error.withValues(alpha: 0.7)),
+            ),
+          ),
+        if (!_isRecording)
+          Padding(
+            padding: EdgeInsets.only(top: 8.h),
+            child: Text(
+              '点击按钮开始录音',
+              style: TextStyle(fontSize: 13.sp, color: AppColors.onSurfaceVariant),
+            ),
+          ),
+        SizedBox(height: 16.h),
+        if (!_isRecording)
+          GestureDetector(
+            onTap: _pickAndUploadAudio,
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.outlineVariant),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.upload_file, size: 18.sp, color: AppColors.onSurfaceVariant),
+                  SizedBox(width: 8.w),
+                  Text('上传音频文件', style: TextStyle(fontSize: 13.sp, color: AppColors.onSurfaceVariant)),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCompactRecordSection() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.mic_none_outlined, size: 64.sp, color: Colors.white24),
-          SizedBox(height: 16.h),
-          Text('点击下方录音按钮开始采集', style: TextStyle(fontSize: 15.sp, color: Colors.white38)),
-          SizedBox(height: 8.h),
-          Text('或上传已有的音频文件', style: TextStyle(fontSize: 13.sp, color: Colors.white24)),
+          _buildRecordButton(),
+          if (_isRecording) ...[
+            SizedBox(width: 16.w),
+            _buildTimerDisplay(),
+          ],
+          if (!_isRecording && _isUploading) ...[
+            SizedBox(width: 16.w),
+            Row(
+              children: [
+                SizedBox(
+                  width: 16.w,
+                  height: 16.w,
+                  child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                ),
+                SizedBox(width: 8.w),
+                Text('上传中...', style: TextStyle(fontSize: 12.sp, color: AppColors.primary)),
+              ],
+            ),
+          ],
+          if (!_isRecording && !_isUploading) ...[
+            SizedBox(width: 16.w),
+            GestureDetector(
+              onTap: _pickAndUploadAudio,
+              child: Container(
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.outlineVariant),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.upload_file, size: 16.sp, color: AppColors.onSurfaceVariant),
+                    SizedBox(width: 6.w),
+                    Text('上传', style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecordButton() {
+    return GestureDetector(
+      onTap: _toggleRecording,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        width: _isRecording ? 80.w : 72.w,
+        height: _isRecording ? 80.w : 72.w,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.transparent,
+          border: Border.all(
+            color: _isRecording ? AppColors.error.withValues(alpha: 0.3) : Colors.transparent,
+            width: 3,
+          ),
+        ),
+        child: Center(
+          child: Container(
+            width: 56.w,
+            height: 56.w,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.error,
+            ),
+            child: Icon(Icons.mic, color: Colors.white, size: 28.sp),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimerDisplay() {
+    return Text(
+      _durationLabel,
+      style: TextStyle(
+        fontSize: 28.sp,
+        fontWeight: FontWeight.w300,
+        color: AppColors.onSurface,
+        fontFamily: 'monospace',
+        letterSpacing: 2,
+      ),
+    );
+  }
+
+  Widget _buildEmptyHint() {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w),
+      child: Column(
+        children: [
+          Icon(Icons.mic_none_outlined, size: 48.sp, color: AppColors.onSurfaceVariant.withValues(alpha: 0.4)),
+          SizedBox(height: 12.h),
+          Text(
+            '点击录音按钮开始采集',
+            style: TextStyle(fontSize: 14.sp, color: AppColors.outline),
+          ),
+          SizedBox(height: 6.h),
+          Text(
+            '或上传已有的音频文件',
+            style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant.withValues(alpha: 0.6)),
+          ),
         ],
       ),
     );
@@ -341,7 +534,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
 
   Widget _buildFileList() {
     return ListView.builder(
-      padding: EdgeInsets.all(16.w),
+      padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 16.h),
       itemCount: _collectedFiles.length,
       itemBuilder: (ctx, i) => _buildFileCard(i),
     );
@@ -351,24 +544,25 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
     final f = _collectedFiles[index];
     final isRecorded = f.type == _FileType.recorded;
     return Container(
-      margin: EdgeInsets.only(bottom: 10.h),
-      padding: EdgeInsets.all(14.w),
+      margin: EdgeInsets.only(bottom: 8.h),
+      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.outlineVariant),
       ),
       child: Row(
         children: [
           Container(
-            width: 40.w, height: 40.w,
+            width: 36.w,
+            height: 36.w,
             decoration: BoxDecoration(
-              color: (isRecorded ? AppColors.primary : AppColors.secondary).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10.r),
+              color: (isRecorded ? AppColors.primary : AppColors.secondary).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Icon(
               isRecorded ? Icons.mic : Icons.upload_file,
-              size: 20.sp,
+              size: 18.sp,
               color: isRecorded ? AppColors.primary : AppColors.secondary,
             ),
           ),
@@ -377,121 +571,114 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(f.name, style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w500, color: Colors.white), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  f.name,
+                  style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w500, color: AppColors.onSurface),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 SizedBox(height: 4.h),
-                Row(children: [
-                  Text(_formatFileSize(f.size), style: TextStyle(fontSize: 11.sp, color: Colors.white54)),
-                  if (f.duration != null) ...[
-                    SizedBox(width: 8.w),
-                    Text(_formatDuration(f.duration!), style: TextStyle(fontSize: 11.sp, color: Colors.white54)),
+                Row(
+                  children: [
+                    Text(
+                      _formatFileSize(f.size),
+                      style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
+                    ),
+                    if (f.duration != null) ...[
+                      SizedBox(width: 8.w),
+                      Container(
+                        width: 4.w,
+                        height: 4.w,
+                        decoration: const BoxDecoration(
+                          color: AppColors.outlineVariant,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Text(
+                        _formatDuration(f.duration!),
+                        style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
+                      ),
+                    ],
                   ],
-                ]),
+                ),
               ],
             ),
           ),
           GestureDetector(
             onTap: () => _removeFile(index),
-            child: Icon(Icons.close, size: 18.sp, color: Colors.white38),
+            child: Container(
+              width: 28.w,
+              height: 28.w,
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Icon(Icons.delete_outline, size: 16.sp, color: AppColors.error.withValues(alpha: 0.6)),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildControls() {
+  Widget _buildSubmitBar() {
     return Container(
-      padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, MediaQuery.of(context).padding.bottom + 16.h),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
+      padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, MediaQuery.of(context).padding.bottom + 12.h),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceContainer,
+        border: Border(top: BorderSide(color: AppColors.outlineVariant)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_isRecording)
-            Padding(
-              padding: EdgeInsets.only(bottom: 12.h),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(width: 8.w, height: 8.w, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
-                  SizedBox(width: 8.w),
-                  Text(_durationLabel, style: TextStyle(fontSize: 28.sp, fontWeight: FontWeight.w300, color: Colors.white, fontFamily: 'monospace', letterSpacing: 2)),
-                ],
-              ),
-            ),
-          if (_collectedFiles.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.only(bottom: 12.h),
-              child: Text('已采集 ${_collectedFiles.length} 份', style: TextStyle(fontSize: 13.sp, color: Colors.white54)),
-            ),
           if (_isUploading)
             Padding(
-              padding: EdgeInsets.only(bottom: 12.h),
+              padding: EdgeInsets.only(bottom: 8.h),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  SizedBox(width: 16.w, height: 16.w, child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+                  SizedBox(
+                    width: 14.w,
+                    height: 14.w,
+                    child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                  ),
                   SizedBox(width: 8.w),
-                  Text('上传中...', style: TextStyle(fontSize: 12.sp, color: AppColors.primary)),
+                  Text('文件上传中...', style: TextStyle(fontSize: 12.sp, color: AppColors.primary)),
                 ],
               ),
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _actionButton(Icons.upload_file, '上传', onTap: _isRecording ? null : _pickAndUploadAudio),
-              GestureDetector(
-                onTap: _toggleRecording,
-                child: Container(
-                  width: 72.w, height: 72.w,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: _isRecording ? Colors.redAccent : Colors.white.withValues(alpha: 0.4), width: 3),
-                  ),
-                  child: Center(
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      width: _isRecording ? 28.w : 52.w,
-                      height: _isRecording ? 28.w : 52.w,
-                      decoration: BoxDecoration(
-                        color: _isRecording ? Colors.red : Colors.redAccent,
-                        borderRadius: BorderRadius.circular(_isRecording ? 6.r : 26.r),
-                      ),
-                    ),
-                  ),
+          SizedBox(
+            width: double.infinity,
+            height: 44.h,
+            child: ElevatedButton(
+              onPressed: _canSubmit ? _submit : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: AppColors.onPrimary,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
               ),
-              _actionButton(Icons.send, '提交', onTap: _canSubmit ? _submit : null),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _actionButton(IconData icon, String label, {VoidCallback? onTap}) {
-    final enabled = onTap != null;
-    return GestureDetector(
-      onTap: onTap,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.35,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 48.w, height: 48.w,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-              ),
-              child: Icon(icon, color: enabled ? Colors.white : Colors.white38, size: 22.sp),
+              child: _isSubmitting
+                  ? SizedBox(
+                      width: 18.w,
+                      height: 18.w,
+                      child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.onPrimary),
+                    )
+                  : Text('提交采集', style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w600)),
             ),
-            SizedBox(height: 6.h),
-            Text(label, style: TextStyle(fontSize: 11.sp, color: enabled ? Colors.white70 : Colors.white38, fontWeight: FontWeight.w500)),
-          ],
-        ),
+          ),
+          if (_collectedFiles.isNotEmpty && !_isSubmitting)
+            Padding(
+              padding: EdgeInsets.only(top: 8.h),
+              child: Text(
+                '已采集 ${_collectedFiles.length} 份文件',
+                style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
+              ),
+            ),
+        ],
       ),
     );
   }

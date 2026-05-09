@@ -14,14 +14,15 @@ import { AdminModule } from './modules/admin/admin.module';
 import { TeamModule } from './modules/team/team.module';
 import { TextCollectionModule } from './modules/text-collection/text-collection.module';
 import { SmsModule } from './modules/sms/sms.module';
+import { RealNameModule } from './modules/real-name/real-name.module';
 import { SeedModule } from './modules/seed/seed.module';
-import { appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsConfig } from './config';
+import { appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsConfig, realNameConfig } from './config';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsConfig],
+      load: [appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsConfig, realNameConfig],
       envFilePath: ['.env.local', '.env'],
     }),
     TypeOrmModule.forRootAsync({
@@ -69,6 +70,7 @@ import { appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsCo
     TeamModule,
     TextCollectionModule,
     SmsModule,
+    RealNameModule,
     SeedModule,
   ],
 })

@@ -63,4 +63,9 @@ export class CreateProjectDto {
   @IsNumber()
   @IsOptional()
   recycleHours?: number;
+
+  @ApiProperty({ description: '所属团队ID', required: false })
+  @IsString()
+  @IsOptional()
+  teamId?: string;
 }

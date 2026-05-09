@@ -5,9 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/models/task_model.dart';
 import '../../../core/models/task_claim_model.dart';
-import '../../../core/services/task_service.dart';
+import '../../../core/models/team_model.dart';
 import '../../../core/models/user_model.dart';
+import '../../../core/services/task_service.dart';
+import '../../../core/services/team_service.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../shared/widgets/skeleton.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -29,50 +32,49 @@ class _HomePageState extends ConsumerState<HomePage> {
   }
 
   Future<void> _loadData() async {
-    // Load claims first so we can filter available tasks
-    await _loadClaims();
-    await Future.wait([_loadAvailableTasks(), _loadUser()]);
-  }
-
-  Future<void> _loadClaims() async {
     setState(() => _isLoading = true);
     try {
-      final claims = await ref.read(taskServiceProvider).getMyClaims();
-      if (mounted) setState(() { _claims = claims; _isLoading = false; });
-    } catch (e) {
+      final results = await Future.wait([
+        ref.read(taskServiceProvider).getMyClaims(),
+        ref.read(teamServiceProvider).getMyTeams(),
+        ref.read(authServiceProvider).getMe(),
+      ]);
+      if (!mounted) return;
+      final claims = results[0] as List<TaskClaimModel>;
+      final teams = results[1] as List<TeamModel>;
+      final user = results[2] as UserModel;
+      setState(() {
+        _claims = claims;
+        _currentUser = user;
+      });
+      await _loadAvailableTasks(teams);
+    } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadAvailableTasks() async {
+  Future<void> _loadAvailableTasks(List<TeamModel> teams) async {
     try {
       final tasks = await ref.read(taskServiceProvider).findAll();
-      // Filter out tasks the user has already claimed
       final claimedTaskIds = _claims.map((c) => c.taskId).toSet();
-      final available = tasks.where((t) => !claimedTaskIds.contains(t.id)).toList();
-      if (mounted) setState(() => _availableTasks = available);
-    } catch (_) {}
+      final teamIds = teams.map((t) => t.id).toSet();
+      final available = tasks.where((t) {
+        if (claimedTaskIds.contains(t.id)) return false;
+        if (t.teamId != null && !teamIds.contains(t.teamId)) return false;
+        return true;
+      }).toList();
+      if (mounted) setState(() { _availableTasks = available; _isLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
-  Future<void> _loadUser() async {
-    try {
-      final user = await ref.read(authServiceProvider).getMe();
-      if (mounted) setState(() => _currentUser = user);
-    } catch (_) {}
-  }
-
-  /// Only show approved claims (claimed / in_progress) — these can be started directly
-  List<TaskClaimModel> get _approvedClaims => _claims
-      .where((c) => c.status == ClaimStatus.claimed || c.status == ClaimStatus.inProgress)
-      .toList();
-
-  List<TaskClaimModel> get _pendingClaims => _claims
-      .where((c) => c.status == ClaimStatus.pendingApproval)
-      .toList();
-
-  List<TaskClaimModel> get _submittedClaims => _claims
-      .where((c) => c.status == ClaimStatus.submitted || c.status == ClaimStatus.completed)
-      .toList();
+  List<TaskClaimModel> get _approvedClaims =>
+      _claims.where((c) => c.status == ClaimStatus.claimed || c.status == ClaimStatus.inProgress).toList();
+  List<TaskClaimModel> get _pendingClaims =>
+      _claims.where((c) => c.status == ClaimStatus.pendingApproval).toList();
+  List<TaskClaimModel> get _submittedClaims =>
+      _claims.where((c) => c.status == ClaimStatus.submitted || c.status == ClaimStatus.completed).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -83,128 +85,45 @@ class _HomePageState extends ConsumerState<HomePage> {
         color: AppColors.primary,
         child: CustomScrollView(
           slivers: [
-            // Top bar
-            SliverToBoxAdapter(
-              child: Container(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top + 12.h,
-                  left: 20.w, right: 20.w, bottom: 16.h,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    GestureDetector(
-                      onTap: () => context.push('/profile'),
-                      child: Container(
-                        width: 40.w, height: 40.w,
-                        decoration: BoxDecoration(color: AppColors.surfaceContainer, shape: BoxShape.circle),
-                        child: Icon(Icons.person, size: 20.sp, color: AppColors.onSurfaceVariant),
-                      ),
-                    ),
-                    Icon(Icons.cloud_sync_outlined, size: 32.sp, color: AppColors.primary),
-                    Container(
-                      width: 40.w, height: 40.w,
-                      decoration: BoxDecoration(color: AppColors.surfaceContainer, shape: BoxShape.circle),
-                      child: Icon(Icons.notifications_none, size: 20.sp, color: AppColors.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            // Welcome banner
-            SliverToBoxAdapter(child: _buildWelcomeBanner()),
-            // Pending approval notice
-            if (_pendingClaims.isNotEmpty)
-              SliverToBoxAdapter(child: _buildPendingNotice()),
-            // My tasks section - approved only
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 4.h),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('我的采集任务', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                    Text('${_approvedClaims.length} 项可开始', style: TextStyle(fontSize: 12.sp, color: AppColors.outline)),
-                  ],
-                ),
-              ),
-            ),
+            SliverToBoxAdapter(child: SizedBox(height: MediaQuery.of(context).padding.top + 12.h)),
+            SliverToBoxAdapter(child: _buildHeader()),
+            SliverToBoxAdapter(child: _buildHeroBanner()),
+            SliverToBoxAdapter(child: _buildQuickNavCards()),
+            if (_pendingClaims.isNotEmpty) SliverToBoxAdapter(child: _buildPendingNotice()),
             if (_isLoading)
-              const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: AppColors.primary)))
-            else if (_approvedClaims.isEmpty && _submittedClaims.isEmpty && _pendingClaims.isEmpty && _availableTasks.isEmpty)
-              SliverFillRemaining(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inbox_outlined, size: 48.sp, color: AppColors.outline),
-                      SizedBox(height: 12.h),
-                      Text('暂无进行中的任务', style: TextStyle(color: AppColors.outline, fontSize: 14.sp)),
-                      SizedBox(height: 8.h),
-                      GestureDetector(
-                        onTap: () => context.push('/tasks'),
-                        child: Text('前往任务大厅领取', style: TextStyle(color: AppColors.primary, fontSize: 14.sp, fontWeight: FontWeight.w600)),
-                      ),
-                    ],
-                  ),
-                ),
+              SliverPadding(
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.layoutMargin.w),
+                sliver: const SliverToBoxAdapter(child: SkeletonTaskList()),
               )
             else ...[
-              // Approved tasks - can start directly
-              if (_approvedClaims.isNotEmpty) ...[
+              if (_approvedClaims.isNotEmpty)
+                SliverToBoxAdapter(child: _buildSectionHeader('我的采集任务', '${_approvedClaims.length} 项可开始')),
+              if (_approvedClaims.isNotEmpty)
                 SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 24.w),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => _buildTaskClaimCard(_approvedClaims[i], canStart: true),
-                      childCount: _approvedClaims.length,
-                    ),
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.layoutMargin.w),
+                  sliver: SliverList(delegate: SliverChildBuilderDelegate(
+                    (_, i) => _buildTaskClaimCard(_approvedClaims[i], canStart: true),
+                    childCount: _approvedClaims.length,
+                  )),
                 ),
-              ],
-              // Submitted/completed section
-              if (_submittedClaims.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(24.w, 20.h, 24.w, 4.h),
-                    child: Text('已完成/审核中', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
-                  ),
-                ),
+              if (_submittedClaims.isNotEmpty)
+                SliverToBoxAdapter(child: _buildSectionHeader('已完成/审核中', null)),
+              if (_submittedClaims.isNotEmpty)
                 SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 24.w),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => _buildTaskClaimCard(_submittedClaims[i], canStart: false),
-                      childCount: _submittedClaims.length,
-                    ),
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.layoutMargin.w),
+                  sliver: SliverList(delegate: SliverChildBuilderDelegate(
+                    (_, i) => _buildTaskClaimCard(_submittedClaims[i], canStart: false),
+                    childCount: _submittedClaims.length,
+                  )),
                 ),
-              ],
-              // Available tasks section - tasks the user can claim
               if (_availableTasks.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(24.w, 20.h, 24.w, 4.h),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('可领取任务', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                        GestureDetector(
-                          onTap: () => context.push('/tasks'),
-                          child: Text('查看全部', style: TextStyle(fontSize: 12.sp, color: AppColors.primary, fontWeight: FontWeight.w500)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                SliverToBoxAdapter(child: _buildAvailableSectionHeader()),
                 SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: 24.w),
-                  sliver: SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) => _buildAvailableTaskCard(_availableTasks[i]),
-                      childCount: _availableTasks.length > 5 ? 5 : _availableTasks.length,
-                    ),
-                  ),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.layoutMargin.w),
+                  sliver: SliverList(delegate: SliverChildBuilderDelegate(
+                    (_, i) => _buildAvailableTaskCard(_availableTasks[i]),
+                    childCount: _availableTasks.length > 5 ? 5 : _availableTasks.length,
+                  )),
                 ),
               ],
             ],
@@ -215,42 +134,197 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  Widget _buildWelcomeBanner() {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(24.w, 0, 24.w, 8.h),
-      child: Container(
-        padding: EdgeInsets.all(20.w),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16.r),
-          gradient: const LinearGradient(
-            begin: Alignment.centerLeft, end: Alignment.centerRight,
-            colors: [Color(0xFF004395), Color(0xFF1A73E8)],
-          ),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 30, offset: const Offset(0, 8))],
+  // ────────────────────────────────────────────────────────────
+  //  Header — cloud_sync icon + "端云智采" title + bell
+  //  Spec: bg surface/80%, backdrop blur, border-b separator/20%
+  // ────────────────────────────────────────────────────────────
+
+  Widget _buildHeader() {
+    return Container(
+      margin: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md.w, vertical: AppSpacing.sm.h),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(AppRadius.card.r),
+        border: Border(
+          bottom: BorderSide(color: AppColors.separator.withValues(alpha: 0.2), width: 1),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        boxShadow: AppShadows.topBar,
+      ),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 36.w,
+            height: 36.w,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            child: Icon(Icons.cloud_sync_outlined, size: 20.sp, color: AppColors.primary),
+          ),
+          SizedBox(width: AppSpacing.sm.w),
+          Text(
+            '端云智采',
+            style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+          ),
+        ]),
+        GestureDetector(
+          onTap: () => context.push('/profile'),
+          child: Container(
+            width: 40.w,
+            height: 40.w,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(Icons.notifications_none, size: 20.sp, color: AppColors.onSurfaceVariant),
+                if (_pendingClaims.isNotEmpty)
+                  Positioned(
+                    top: 9.h,
+                    right: 9.w,
+                    child: Container(
+                      width: 8.w,
+                      height: 8.w,
+                      decoration: const BoxDecoration(
+                        color: AppColors.orange,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  Hero Banner — gradient overlay with title + carousel dots
+  // ────────────────────────────────────────────────────────────
+
+  Widget _buildHeroBanner() {
+    final pendingCount = _approvedClaims.length;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
+      child: Container(
+        height: 160.h,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.card.r),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFF7A45),
+              Color(0xFFFFB59A),
+              Color(0xFF353535),
+            ],
+            stops: [0.0, 0.45, 1.0],
+          ),
+          boxShadow: AppShadows.card,
+        ),
+        child: Stack(
           children: [
-            Text(
-              _currentUser != null ? '你好，${_currentUser!.displayName}' : '你好，采集员',
-              style: TextStyle(fontSize: 20.sp, fontWeight: FontWeight.w700, color: Colors.white),
-            ),
-            SizedBox(height: 4.h),
-            Text(
-              '${_approvedClaims.length} 个任务待采集',
-              style: TextStyle(fontSize: 13.sp, color: Colors.white.withValues(alpha: 0.9)),
-            ),
-            SizedBox(height: 16.h),
-            GestureDetector(
-              onTap: () => context.push('/tasks'),
+            // Decorative ambient circles
+            Positioned(
+              top: -24.h,
+              right: -24.w,
               child: Container(
-                padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 10.h),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20.r)),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('前往任务大厅', style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
-                  SizedBox(width: 4.w),
-                  Icon(Icons.arrow_forward, size: 14.sp, color: AppColors.primary),
-                ]),
+                width: 130.w,
+                height: 130.w,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.05),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -32.h,
+              left: -16.w,
+              child: Container(
+                width: 90.w,
+                height: 90.w,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.black.withValues(alpha: 0.12),
+                ),
+              ),
+            ),
+            // Content
+            Padding(
+              padding: EdgeInsets.all(20.w),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _currentUser != null ? '你好，${_currentUser!.displayName}' : '你好，采集员',
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white.withValues(alpha: 0.88),
+                    ),
+                  ),
+                  SizedBox(height: 6.h),
+                  Text(
+                    '全球数据加速采集中',
+                    style: TextStyle(
+                      fontSize: 22.sp,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      height: 1.2,
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      GestureDetector(
+                        onTap: () => context.push('/tasks'),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: AppSpacing.sm.h),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(AppRadius.full),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.25),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Text(
+                              pendingCount > 0 ? '$pendingCount 个任务待采集' : '前往任务大厅',
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: AppSpacing.xs.w),
+                            Icon(Icons.arrow_forward, size: 13.sp, color: Colors.white),
+                          ]),
+                        ),
+                      ),
+                      // Carousel indicator dots
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(3, (i) => Container(
+                          width: i == 0 ? 20.w : 6.w,
+                          height: 6.w,
+                          margin: EdgeInsets.only(left: i > 0 ? 4.w : 0),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(AppRadius.full),
+                            color: i == 0
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.4),
+                          ),
+                        )),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
@@ -259,157 +333,494 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
+  // ────────────────────────────────────────────────────────────
+  //  Quick-Access Nav Cards — 音频采集 / 图像采集 / 视频采集
+  //  Breadcrumb-style cards with low-alpha icon and border
+  // ────────────────────────────────────────────────────────────
+
+  Widget _buildQuickNavCards() {
+    final navItems = [
+      const _QuickNavItem(Icons.mic, '音频采集', TaskType.audio, AppColors.orange),
+      const _QuickNavItem(Icons.image, '图像采集', TaskType.image, AppColors.primary),
+      const _QuickNavItem(Icons.videocam, '视频采集', TaskType.video, AppColors.tertiary),
+    ];
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
+      child: Row(
+        children: navItems.map((item) {
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => context.push('/tasks', extra: {'type': item.type.name}),
+              child: Container(
+                margin: EdgeInsets.symmetric(horizontal: AppSpacing.xs.w),
+                padding: EdgeInsets.symmetric(vertical: 16.h),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceContainer,
+                  borderRadius: BorderRadius.circular(AppRadius.card.r),
+                  border: Border.all(color: AppColors.outlineVariant, width: 1),
+                  boxShadow: AppShadows.card,
+                ),
+                child: Column(children: [
+                  Container(
+                    width: 44.w,
+                    height: 44.w,
+                    decoration: BoxDecoration(
+                      color: item.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.card.r),
+                    ),
+                    child: Icon(item.icon, size: 22.sp, color: item.color),
+                  ),
+                  SizedBox(height: AppSpacing.sm.h),
+                  Text(
+                    item.label,
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  // ─── Pending Approval Notice ───
+
   Widget _buildPendingNotice() {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24.w, 0, 24.w, 8.h),
+      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
       child: Container(
-        padding: EdgeInsets.all(12.w),
+        padding: EdgeInsets.all(AppSpacing.dataGutter.w),
         decoration: BoxDecoration(
-          color: const Color(0xFFFFF7E6),
-          borderRadius: BorderRadius.circular(10.r),
-          border: Border.all(color: const Color(0xFFFFD591)),
+          color: AppColors.orange.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AppRadius.card.r),
+          border: Border.all(color: AppColors.orange.withValues(alpha: 0.2)),
         ),
         child: Row(children: [
-          Icon(Icons.schedule, size: 18.sp, color: const Color(0xFFFA8C16)),
-          SizedBox(width: 8.w),
-          Expanded(child: Text('${_pendingClaims.length} 个任务申请待审批', style: TextStyle(fontSize: 13.sp, color: const Color(0xFFD46B08)))),
+          Icon(Icons.schedule, size: 18.sp, color: AppColors.orange),
+          SizedBox(width: AppSpacing.sm.w),
+          Expanded(child: Text(
+            '${_pendingClaims.length} 个任务申请待审批',
+            style: TextStyle(fontSize: 13.sp, color: AppColors.orange),
+          )),
         ]),
       ),
     );
   }
 
-  Widget _buildTaskClaimCard(TaskClaimModel claim, {required bool canStart}) {
-    final isTextTask = claim.taskType == 'text';
-    final onTapRoute = canStart
-        ? (isTextTask ? '/text-collection/${claim.taskId}' : '/collection/${claim.id}')
-        : null;
+  // ─── Section Header ───
 
-    return Container(
-      margin: EdgeInsets.only(bottom: 12.h),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16.r),
-        border: Border.all(color: const Color(0xFFF9FAFB)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 30, offset: const Offset(0, 8))],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16.r),
-        child: InkWell(
-          onTap: canStart ? () => context.push(onTapRoute!) : null,
-          borderRadius: BorderRadius.circular(16.r),
-          child: Padding(
-            padding: EdgeInsets.all(16.w),
-            child: Row(children: [
-              Container(
-                width: 44.w, height: 44.w,
-                decoration: BoxDecoration(
-                  color: canStart ? AppColors.primary.withValues(alpha: 0.08) : AppColors.outline.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  isTextTask
-                      ? (canStart ? Icons.text_fields : Icons.text_fields_outlined)
-                      : (canStart ? Icons.play_circle_fill : Icons.check_circle_outline),
-                  size: 22.sp,
-                  color: canStart ? AppColors.primary : AppColors.outline,
-                ),
+  Widget _buildSectionHeader(String title, String? subtitle) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, AppSpacing.md.h, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(
+          title,
+          style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+        ),
+        if (subtitle != null)
+          Text(
+            subtitle,
+            style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant),
+          ),
+      ]),
+    );
+  }
+
+  // ─── Available Section Header — "已发采集项" + "查看全部" chip ───
+
+  Widget _buildAvailableSectionHeader() {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, AppSpacing.md.h, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Text(
+          '已发采集项',
+          style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface),
+        ),
+        GestureDetector(
+          onTap: () => context.push('/tasks'),
+          child: Container(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm.w, vertical: AppSpacing.xs.h),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(
+                '查看全部',
+                style: TextStyle(fontSize: 12.sp, color: AppColors.primary, fontWeight: FontWeight.w600),
               ),
-              SizedBox(width: 12.w),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(claim.taskTitle ?? '任务 #${claim.taskId.substring(0, 8)}', style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                  SizedBox(height: 4.h),
-                  Text(claim.statusLabel, style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant)),
-                ],
-              )),
-              if (canStart)
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
-                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8.r)),
-                  child: Text(isTextTask ? '查看文本' : '开始采集', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: Colors.white)),
-                )
-              else
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
-                  decoration: BoxDecoration(color: _statusColor(claim.status).withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6.r)),
-                  child: Text(claim.statusLabel, style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w600, color: _statusColor(claim.status))),
-                ),
+              SizedBox(width: 2.w),
+              Icon(Icons.arrow_forward_ios, size: 10.sp, color: AppColors.primary),
             ]),
           ),
         ),
+      ]),
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  Task Claim Card — approved / submitted
+  //  Card bg #20201f, #58423a border, rounded-28, neomorph shadow
+  //  Decorative corner circle, type chip, status badge
+  // ────────────────────────────────────────────────────────────
+
+  Widget _buildTaskClaimCard(TaskClaimModel claim, {required bool canStart}) {
+    final isTextTask = claim.taskType == 'text';
+    final iconData = isTextTask
+        ? (canStart ? Icons.text_fields : Icons.text_fields_outlined)
+        : (canStart ? Icons.play_circle_fill : Icons.check_circle_outline);
+    final iconColor = canStart ? AppColors.primary : AppColors.outline;
+
+    return Container(
+      margin: EdgeInsets.only(bottom: AppSpacing.dataGutter.h),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppRadius.card.r),
+        border: Border.all(color: AppColors.outlineVariant, width: 1),
+        boxShadow: AppShadows.card,
+      ),
+      child: Stack(
+        children: [
+          // Decorative corner circle
+          Positioned(
+            top: -14.h,
+            right: -14.w,
+            child: Container(
+              width: 50.w,
+              height: 50.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: iconColor.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.card.r),
+            child: InkWell(
+              onTap: canStart
+                  ? () => context.push(isTextTask ? '/text-collection/${claim.taskId}' : '/collection/${claim.id}')
+                  : null,
+              borderRadius: BorderRadius.circular(AppRadius.card.r),
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.cardPadding.w),
+                child: Row(children: [
+                  Container(
+                    width: 44.w,
+                    height: 44.w,
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.full),
+                    ),
+                    child: Icon(iconData, size: 22.sp, color: iconColor),
+                  ),
+                  SizedBox(width: AppSpacing.dataGutter.w),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          claim.taskTitle ?? '任务 #${claim.taskId.substring(0, 8)}',
+                          style: TextStyle(
+                            fontSize: 15.sp,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.onSurface,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        SizedBox(height: AppSpacing.xs.h),
+                        Text(
+                          claim.statusLabel,
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: AppSpacing.sm.w),
+                  if (canStart)
+                    _buildActionButton(isTextTask ? '查看文本' : '开始采集', iconColor)
+                  else
+                    _buildStatusBadge(claim.status),
+                ]),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Action Button — rounded-lg, warm amber, tactile glow ───
+
+  Widget _buildActionButton(String label, Color color) {
+    return GestureDetector(
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: AppSpacing.sm.h),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(AppRadius.sm.r),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.35),
+              blurRadius: 10.r,
+              offset: Offset(0, 2.h),
+            ),
+          ],
+        ),
+        child: Text(
+          label,
+          style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w600, color: AppColors.onPrimary),
+        ),
+      ),
+    );
+  }
+
+  // ─── Status Badge — full-round, low-alpha bg, 1px matching border ───
+
+  Widget _buildStatusBadge(ClaimStatus status) {
+    final color = _statusColor(status);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: AppSpacing.xs.h),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
+      ),
+      child: Text(
+        _statusLabel(status),
+        style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: color),
       ),
     );
   }
 
   Color _statusColor(ClaimStatus status) => switch (status) {
-    ClaimStatus.pendingApproval => const Color(0xFFFA8C16),
-    ClaimStatus.claimed => AppColors.primary,
-    ClaimStatus.inProgress => AppColors.primaryContainer,
+    ClaimStatus.pendingApproval => AppColors.orange,
+    ClaimStatus.claimed || ClaimStatus.inProgress => AppColors.primary,
     ClaimStatus.submitted => AppColors.orange,
     ClaimStatus.completed => AppColors.secondary,
-    ClaimStatus.abandoned => AppColors.error,
+    ClaimStatus.abandoned || ClaimStatus.rejected => AppColors.error,
     ClaimStatus.expired => AppColors.outline,
-    ClaimStatus.rejected => AppColors.error,
   };
 
+  String _statusLabel(ClaimStatus status) => switch (status) {
+    ClaimStatus.pendingApproval => '待审批',
+    ClaimStatus.claimed => '已领取',
+    ClaimStatus.inProgress => '进行中',
+    ClaimStatus.submitted => '已提交',
+    ClaimStatus.completed => '已完成',
+    ClaimStatus.abandoned => '已放弃',
+    ClaimStatus.expired => '已过期',
+    ClaimStatus.rejected => '已驳回',
+  };
+
+  // ────────────────────────────────────────────────────────────
+  //  Available Task Card — Stitch spec full layout
+  //  Card bg #20201f, #58423a border, rounded-28, neomorph shadow
+  //  Type chip, title, ID, price, deadline, progress bar, button
+  // ────────────────────────────────────────────────────────────
+
   Widget _buildAvailableTaskCard(TaskModel task) {
-    final typeIcon = switch (task.type) {
-      TaskType.audio => Icons.mic,
-      TaskType.text => Icons.text_fields,
-      TaskType.image => Icons.image,
-      TaskType.video => Icons.videocam,
-    };
+    final typeConfig = _typeVisual(task.type);
     final remaining = task.totalQuantity - task.claimedQuantity;
+    final progress = task.totalQuantity > 0
+        ? (task.claimedQuantity / task.totalQuantity).clamp(0.0, 1.0)
+        : 0.0;
 
     return Container(
-      margin: EdgeInsets.only(bottom: 10.h),
+      margin: EdgeInsets.only(bottom: AppSpacing.dataGutter.h),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: const Color(0xFFF0F0F0)),
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppRadius.card.r),
+        border: Border.all(color: AppColors.outlineVariant, width: 1),
+        boxShadow: AppShadows.card,
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12.r),
-        child: InkWell(
-          onTap: () => context.push('/tasks/${task.id}'),
-          borderRadius: BorderRadius.circular(12.r),
-          child: Padding(
-            padding: EdgeInsets.all(14.w),
-            child: Row(children: [
-              Container(
-                width: 40.w, height: 40.w,
-                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10.r)),
-                child: Icon(typeIcon, size: 20.sp, color: AppColors.primary),
+      child: Stack(
+        children: [
+          // Decorative corner circle
+          Positioned(
+            top: -16.h,
+            right: -16.w,
+            child: Container(
+              width: 64.w,
+              height: 64.w,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: typeConfig.color.withValues(alpha: 0.06),
               ),
-              SizedBox(width: 12.w),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(task.title, style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
-                  SizedBox(height: 4.h),
-                  Row(children: [
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                      decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(4.r)),
-                      child: Text(task.typeLabel, style: TextStyle(fontSize: 10.sp, color: AppColors.primary)),
-                    ),
-                    SizedBox(width: 8.w),
-                    Text('剩余 $remaining 份', style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant)),
-                    if (task.unitPrice > 0) ...[
-                      SizedBox(width: 8.w),
-                      Text('¥${task.unitPrice.toStringAsFixed(task.unitPrice.truncateToDouble() == task.unitPrice ? 0 : 2)}', style: TextStyle(fontSize: 11.sp, color: AppColors.secondary, fontWeight: FontWeight.w600)),
-                    ],
-                  ]),
-                ],
-              )),
-              Icon(Icons.chevron_right, size: 20.sp, color: AppColors.onSurfaceVariant),
-            ]),
+            ),
           ),
-        ),
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.card.r),
+            child: InkWell(
+              onTap: () => context.push('/tasks/${task.id}'),
+              borderRadius: BorderRadius.circular(AppRadius.card.r),
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.cardPadding.w),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Top row: type chip + price ──
+                    Row(children: [
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm.w, vertical: 2.h),
+                        decoration: BoxDecoration(
+                          color: typeConfig.color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(AppRadius.sm.r),
+                          border: Border.all(
+                            color: typeConfig.color.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(typeConfig.icon, size: 12.sp, color: typeConfig.color),
+                          SizedBox(width: 4.w),
+                          Text(
+                            task.typeLabel,
+                            style: TextStyle(
+                              fontSize: 11.sp,
+                              color: typeConfig.color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ]),
+                      ),
+                      const Spacer(),
+                      if (task.unitPrice > 0)
+                        Text(
+                          task.priceLabel,
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            color: AppColors.secondary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                    ]),
+                    SizedBox(height: AppSpacing.sm.h),
+                    // ── Title ──
+                    Text(
+                      task.title,
+                      style: TextStyle(
+                        fontSize: 15.sp,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: AppSpacing.xs.h),
+                    // ── ID, remaining, deadline ──
+                    Row(children: [
+                      Text(
+                        'ID ${task.id.substring(0, 8)}',
+                        style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
+                      ),
+                      SizedBox(width: AppSpacing.sm.w),
+                      Container(
+                        width: 3.w,
+                        height: 3.w,
+                        decoration: BoxDecoration(
+                          color: AppColors.outline,
+                          borderRadius: BorderRadius.circular(AppRadius.full),
+                        ),
+                      ),
+                      SizedBox(width: AppSpacing.sm.w),
+                      Text(
+                        '剩余 $remaining/${task.totalQuantity}',
+                        style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
+                      ),
+                      if (task.deadline != null) ...[
+                        const Spacer(),
+                        Icon(Icons.access_time, size: 11.sp, color: AppColors.outline),
+                        SizedBox(width: 3.w),
+                        Text(
+                          '${task.deadline!.month}/${task.deadline!.day} 截止',
+                          style: TextStyle(fontSize: 11.sp, color: AppColors.outline),
+                        ),
+                      ],
+                    ]),
+                    SizedBox(height: AppSpacing.sm.h),
+                    // ── Progress bar ──
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.full),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: AppColors.surfaceVariant,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          progress >= 0.9 ? AppColors.orange : typeConfig.color,
+                        ),
+                        minHeight: 4.h,
+                      ),
+                    ),
+                    SizedBox(height: AppSpacing.sm.h),
+                    // ── "领取任务" button ──
+                    GestureDetector(
+                      onTap: () => context.push('/tasks/${task.id}'),
+                      child: Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm.h),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(AppRadius.sm.r),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '领取任务',
+                            style: TextStyle(
+                              fontSize: 14.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  _TypeVisual _typeVisual(TaskType type) => switch (type) {
+    TaskType.audio => const _TypeVisual(Icons.mic, AppColors.orange),
+    TaskType.image => const _TypeVisual(Icons.image, AppColors.primary),
+    TaskType.video => const _TypeVisual(Icons.videocam, AppColors.tertiary),
+    TaskType.text => const _TypeVisual(Icons.text_fields, AppColors.secondary),
+  };
+}
+
+class _QuickNavItem {
+  final IconData icon;
+  final String label;
+  final TaskType type;
+  final Color color;
+  const _QuickNavItem(this.icon, this.label, this.type, this.color);
+}
+
+class _TypeVisual {
+  final IconData icon;
+  final Color color;
+  const _TypeVisual(this.icon, this.color);
 }

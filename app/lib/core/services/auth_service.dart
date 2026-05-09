@@ -65,10 +65,39 @@ class AuthService {
   Future<Map<String, dynamic>> verifyRealName({
     required String realName,
     required String idCardNumber,
+    String? idCardFrontUrl,
+    String? idCardBackUrl,
   }) async {
     final res = await _client.dio.post('/auth/real-name', data: {
       'realName': realName,
       'idCardNumber': idCardNumber,
+      if (idCardFrontUrl != null) 'idCardFrontUrl': idCardFrontUrl,
+      if (idCardBackUrl != null) 'idCardBackUrl': idCardBackUrl,
+    });
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> ocrIdCardFront(String base64Str) async {
+    final res = await _client.dio.post('/real-name/ocr-front', data: {
+      'base64Str': base64Str,
+    });
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> ocrIdCardBack(String base64Str) async {
+    final res = await _client.dio.post('/real-name/ocr-back', data: {
+      'base64Str': base64Str,
+    });
+    return res.data;
+  }
+
+  Future<Map<String, dynamic>> verifyIdentity({
+    required String cardNo,
+    required String realName,
+  }) async {
+    final res = await _client.dio.post('/real-name/verify', data: {
+      'cardNo': cardNo,
+      'realName': realName,
     });
     return res.data;
   }

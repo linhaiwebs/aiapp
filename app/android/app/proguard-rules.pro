@@ -16,5 +16,8 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 
+# Play Core (not used, suppress R8 warnings)
+-dontwarn com.google.android.play.core.**
+
 # Model classes
 -keep class com.xcai.app.** { *; }

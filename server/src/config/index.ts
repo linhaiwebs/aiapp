@@ -61,12 +61,19 @@ export const jwtConfig = registerAs('jwt', () => ({
   refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
 }));
 
+export const realNameConfig = registerAs('realName', () => ({
+  mcpUrl: process.env.REAL_NAME_MCP_URL || '',
+}));
+
 export const smsConfig = registerAs('sms', () => ({
-  provider: process.env.SMS_PROVIDER || 'mock', // 'aliyun' or 'mock'
+  provider: process.env.SMS_PROVIDER || 'mock', // 'aliyun' | 'mcp' | 'mock'
   accessKeyId: process.env.SMS_ACCESS_KEY_ID || '',
   accessKeySecret: process.env.SMS_ACCESS_KEY_SECRET || '',
   signName: process.env.SMS_SIGN_NAME || '',
   templateCode: process.env.SMS_TEMPLATE_CODE || '',
+  // MCP SMS config (阿里云市场 MCP 服务)
+  mcpUrl: process.env.SMS_MCP_URL || '',
+  mcpTemplateId: process.env.SMS_MCP_TEMPLATE_ID || 'lxym_20111_sdgsfhwqgvyh',
   // Rate limiting
   codeLength: parseInt(process.env.SMS_CODE_LENGTH || '6', 10),
   codeTtlSeconds: parseInt(process.env.SMS_CODE_TTL || '300', 10),   // 5 minutes

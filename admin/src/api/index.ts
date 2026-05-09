@@ -45,6 +45,8 @@ export const taskApi = {
   approveClaim: (claimId: string) => api.post(`/tasks/claims/${claimId}/approve`),
   rejectClaim: (claimId: string, reason?: string) => api.post(`/tasks/claims/${claimId}/reject`, { reason }),
   clearAllData: () => api.delete('/tasks/data/all'),
+  batchDelete: (ids: string[]) => api.post('/tasks/batch-delete', { ids }),
+  batchUpdateStatus: (ids: string[], status: string) => api.post('/tasks/batch-status', { ids, status }),
 };
 
 export const userApi = {

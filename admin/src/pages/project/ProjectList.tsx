@@ -47,6 +47,12 @@ export default function ProjectList() {
   const columns = [
     { title: '项目名称', dataIndex: 'name', key: 'name', render: (v: string) => <strong>{v}</strong> },
     { title: '地区', dataIndex: 'region', key: 'region', width: 80, render: (v: string) => v || '-' },
+    {
+      title: '所属团队',
+      key: 'team',
+      width: 120,
+      render: (_: any, r: any) => r.team?.name || <span style={{ color: '#999' }}>未指定</span>,
+    },
 
     {
       title: '状态',

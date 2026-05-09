@@ -103,7 +103,10 @@ export default function TaskForm() {
 
 
   const handleSaveTexts = async () => {
-    const taskId = id;
+    if (!id) {
+      message.warning('请先创建任务后再保存文本');
+      return;
+    }
     const texts = textContent.split('\n').filter((t) => t.trim());
     if (!texts.length) {
       message.warning('请输入文本内容');
@@ -111,7 +114,7 @@ export default function TaskForm() {
     }
     setSavingText(true);
     try {
-      await textCollectionApi.batchCreate({ taskId, texts });
+      await textCollectionApi.batchCreate({ taskId: id, texts });
       message.success(`已保存 ${texts.length} 条文本`);
       setTextContent('');
     } catch (e: any) {
@@ -125,7 +128,7 @@ export default function TaskForm() {
 
   return (
     <Row gutter={24}>
-      <Col span={taskType === 'text' && isEdit ? 16 : 24}>
+      <Col span={taskType === 'text' ? 16 : 24}>
     <div>
       <Button
         type="text"
@@ -154,6 +157,7 @@ export default function TaskForm() {
             reviewRounds: 1,
             recycleHours: 48,
             textAssignCount: 0,
+            textPerUserCount: 0,
             textCopyForAssign: false,
             assistRecognition: false,
             silenceDetection: false,
@@ -173,12 +177,12 @@ export default function TaskForm() {
                   <>
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="title" label="任务标题" rules={[{ required: true, message: '请输入任务标题' }]}>
+                        <Form.Item name="title" label="任务标题" tooltip="任务的名称，采集员可见" rules={[{ required: true, message: '请输入任务标题' }]}>
                           <Input placeholder="请输入任务标题" />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="type" label="任务类型" rules={[{ required: true }]}>
+                        <Form.Item name="type" label="任务类型" tooltip="采集数据类型：语音、图像、视频或文本" rules={[{ required: true }]}>
                           <Select
                             onChange={(v) => setTaskType(v)}
                             options={[
@@ -191,7 +195,7 @@ export default function TaskForm() {
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="projectId" label="所属项目" rules={[{ required: true, message: '请选择项目' }]}>
+                        <Form.Item name="projectId" label="所属项目" tooltip="任务归属的项目" rules={[{ required: true, message: '请选择项目' }]}>
                           <Select
                             placeholder="选择项目"
                             options={projects.map((p: any) => ({ label: p.name, value: p.id }))}
@@ -200,13 +204,13 @@ export default function TaskForm() {
                       </Col>
                     </Row>
 
-                    <Form.Item name="description" label="任务描述">
+                    <Form.Item name="description" label="任务描述" tooltip="对任务内容和要求的简要描述">
                       <Input.TextArea rows={3} />
                     </Form.Item>
 
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="difficulty" label="难度">
+                        <Form.Item name="difficulty" label="难度" tooltip="任务难度等级：简单、中等、困难">
                           <Select
                             options={[
                               { label: '简单', value: 'easy' },
@@ -217,12 +221,12 @@ export default function TaskForm() {
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="unitPrice" label="单价(元)" rules={[{ required: true }]}>
+                        <Form.Item name="unitPrice" label="单价(元)" tooltip="每完成一个任务单位支付给采集员的费用" rules={[{ required: true }]}>
                           <InputNumber min={0.01} step={0.1} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="totalQuantity" label="总数量" rules={[{ required: true }]}>
+                        <Form.Item name="totalQuantity" label="总数量" tooltip="任务需要采集的总条数" rules={[{ required: true }]}>
                           <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
@@ -230,17 +234,17 @@ export default function TaskForm() {
 
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="maxClaimsPerUser" label="每人限领">
+                        <Form.Item name="maxClaimsPerUser" label="每人限领" tooltip="每个采集员最多可领取的任务数量">
                           <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="region" label="地域限制">
+                        <Form.Item name="region" label="地域限制" tooltip="限制可参与任务的采集员地理区域">
                           <Input placeholder="如：北京" />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="language" label="语言要求">
+                        <Form.Item name="language" label="语言要求" tooltip="采集员需具备的语言能力要求，如：普通话">
                           <Input placeholder="如：普通话" />
                         </Form.Item>
                       </Col>
@@ -248,12 +252,12 @@ export default function TaskForm() {
 
                     <Row gutter={16}>
                       <Col span={12}>
-                        <Form.Item name="deadline" label="截止时间">
+                        <Form.Item name="deadline" label="截止时间" tooltip="任务关闭申请的截止日期时间">
                           <DatePicker showTime style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
-                        <Form.Item name="categoryId" label="分类">
+                        <Form.Item name="categoryId" label="分类" tooltip="任务所属的分类标签">
                           <Select
                             allowClear
                             placeholder="选择分类"
@@ -263,11 +267,11 @@ export default function TaskForm() {
                       </Col>
                     </Row>
 
-                    <Form.Item name="instructions" label="任务说明">
+                    <Form.Item name="instructions" label="任务说明" tooltip="详细的任务说明和采集操作要求">
                       <Input.TextArea rows={4} placeholder="详细的任务说明和采集要求" />
                     </Form.Item>
 
-                    <Form.Item name="status" label="状态">
+                    <Form.Item name="status" label="状态" tooltip="任务当前的生命周期状态">
                       <Select
                         options={
                           isEdit
@@ -294,7 +298,7 @@ export default function TaskForm() {
                   <>
                     <Row gutter={16}>
                       <Col span={12}>
-                        <Form.Item name="qcMethod" label="质检方式">
+                        <Form.Item name="qcMethod" label="质检方式" tooltip="抽检=系统自动抽查，人工抽检=人工抽查">
                           <Select
                             options={[
                               { label: '抽检', value: 'spot_check' },
@@ -304,19 +308,19 @@ export default function TaskForm() {
                         </Form.Item>
                       </Col>
                       <Col span={12}>
-                        <Form.Item name="minQualityScore" label="最低质量分">
+                        <Form.Item name="minQualityScore" label="最低质量分" tooltip="采集结果合格的最低质量分数，低于此分将被驳回">
                           <InputNumber min={0} max={100} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                     </Row>
                     <Row gutter={16}>
                       <Col span={12}>
-                        <Form.Item name="passRateRequirement" label="合格率要求(%)">
+                        <Form.Item name="passRateRequirement" label="合格率要求(%)" tooltip="采集员提交的合格率百分比要求">
                           <InputNumber min={0} max={100} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
-                        <Form.Item name="reviewRounds" label="验收轮数">
+                        <Form.Item name="reviewRounds" label="验收轮数" tooltip="提交结果需要经过几轮验收审核">
                           <InputNumber min={1} max={10} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
@@ -331,24 +335,29 @@ export default function TaskForm() {
                   <>
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="allowMultipleClaims" label="允许多次领取" valuePropName="checked">
+                        <Form.Item name="allowMultipleClaims" label="允许多次领取" valuePropName="checked" tooltip="开启后允许同一采集员多次领取该任务">
                           <Switch />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="recycleHours" label="回收时间(小时)">
+                        <Form.Item name="recycleHours" label="回收时间(小时)" tooltip="任务领取后超时未完成将自动回收">
                           <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="textAssignCount" label="文本分配人数">
+                        <Form.Item name="textAssignCount" label="文本分配人数" tooltip="指定分配给多少位采集员，0=系统自动分配">
                           <InputNumber min={0} style={{ width: '100%' }} placeholder="0=自动" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={8}>
+                        <Form.Item name="textPerUserCount" label="每人条数" tooltip="每人固定分配X条文本，>0时优先于分配人数模式">
+                          <InputNumber min={0} style={{ width: '100%' }} placeholder="0=不启用" />
                         </Form.Item>
                       </Col>
                     </Row>
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="textCopyForAssign" label="复制多份分配" valuePropName="checked">
+                        <Form.Item name="textCopyForAssign" label="复制多份分配" valuePropName="checked" tooltip="开启后将文本复制多份分配给不同采集员">
                           <Switch />
                         </Form.Item>
                       </Col>
@@ -367,7 +376,7 @@ export default function TaskForm() {
                     <>
                       <Row gutter={16}>
                         <Col span={8}>
-                          <Form.Item name="audioFormat" label="音频格式">
+                          <Form.Item name="audioFormat" label="音频格式" tooltip="输出音频文件格式：WAV无损 / PCM原始格式">
                             <Select
                               options={[
                                 { label: 'WAV', value: 'wav' },
@@ -377,7 +386,7 @@ export default function TaskForm() {
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="audioChannel" label="声道">
+                          <Form.Item name="audioChannel" label="声道" tooltip="声道数量：单声道或双声道">
                             <Select
                               options={[
                                 { label: '单声道', value: 'mono' },
@@ -387,7 +396,7 @@ export default function TaskForm() {
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="sampleRate" label="采样率">
+                          <Form.Item name="sampleRate" label="采样率" tooltip="音频采样率，越高音质越好文件越大">
                             <Select
                               options={[
                                 { label: '16000 Hz', value: 16000 },
@@ -400,17 +409,17 @@ export default function TaskForm() {
                       </Row>
                       <Row gutter={16}>
                         <Col span={8}>
-                          <Form.Item name="noiseLimit" label="噪音上限(dB)">
+                          <Form.Item name="noiseLimit" label="噪音上限(dB)" tooltip="允许的最大环境噪音分贝值">
                             <InputNumber min={0} style={{ width: '100%' }} placeholder="如：-30" />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="maxSpeechLength" label="最大语音长度(秒)">
+                          <Form.Item name="maxSpeechLength" label="最大语音长度(秒)" tooltip="单条音频的最大时长限制">
                             <InputNumber min={1} style={{ width: '100%' }} placeholder="如：60" />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="silencePadding" label="静音区预留(ms)">
+                          <Form.Item name="silencePadding" label="静音区预留(ms)" tooltip="音频首尾静音区域的预留时长">
                             <InputNumber min={0} style={{ width: '100%' }} placeholder="如：300" />
                           </Form.Item>
                         </Col>
@@ -425,29 +434,29 @@ export default function TaskForm() {
                     <>
                       <Row gutter={16}>
                         <Col span={8}>
-                          <Form.Item name="assistRecognition" label="辅助识别" valuePropName="checked">
+                          <Form.Item name="assistRecognition" label="辅助识别" valuePropName="checked" tooltip="利用机器语音识别技术辅助标注">
                             <Switch />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="silenceDetection" label="静音检测" valuePropName="checked">
+                          <Form.Item name="silenceDetection" label="静音检测" valuePropName="checked" tooltip="自动检测音频中的静音片段">
                             <Switch />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="voiceprintDetection" label="声纹检测" valuePropName="checked">
+                          <Form.Item name="voiceprintDetection" label="声纹检测" valuePropName="checked" tooltip="自动检测说话人的声纹特征">
                             <Switch />
                           </Form.Item>
                         </Col>
                       </Row>
                       <Row gutter={16}>
                         <Col span={8}>
-                          <Form.Item name="gainDetection" label="增幅检测" valuePropName="checked">
+                          <Form.Item name="gainDetection" label="增幅检测" valuePropName="checked" tooltip="自动检测音频信号增益是否正常">
                             <Switch />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="signalDetection" label="信号检测" valuePropName="checked">
+                          <Form.Item name="signalDetection" label="信号检测" valuePropName="checked" tooltip="自动检测音频信号质量是否达标">
                             <Switch />
                           </Form.Item>
                         </Col>
@@ -474,7 +483,7 @@ export default function TaskForm() {
       </Card>
     </div>
       </Col>
-      {taskType === 'text' && isEdit && (
+      {taskType === 'text' && (
         <Col span={8}>
           <Card title="任务对照内容" size="small">
             <Input.TextArea

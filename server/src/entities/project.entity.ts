@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Task } from './task.entity';
 import { User } from './user.entity';
+import { Team } from './team.entity';
 
 @Entity('projects')
 export class Project {
@@ -68,6 +69,14 @@ export class Project {
   /** 回收时间（小时），超时未完成任务自动回收 */
   @Column({ type: 'int', default: 48 })
   recycleHours: number;
+
+  /** 所属团队ID */
+  @Column({ nullable: true })
+  teamId: string;
+
+  @ManyToOne(() => Team, { nullable: true, createForeignKeyConstraints: false })
+  @JoinColumn({ name: 'teamId' })
+  team: Team;
 
   @OneToMany(() => Task, (task) => task.project)
   tasks: Task[];
