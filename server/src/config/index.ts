@@ -66,17 +66,15 @@ export const realNameConfig = registerAs('realName', () => ({
 }));
 
 export const smsConfig = registerAs('sms', () => ({
-  provider: process.env.SMS_PROVIDER || 'mock', // 'aliyun' | 'mcp' | 'mock'
-  accessKeyId: process.env.SMS_ACCESS_KEY_ID || '',
-  accessKeySecret: process.env.SMS_ACCESS_KEY_SECRET || '',
-  signName: process.env.SMS_SIGN_NAME || '',
-  templateCode: process.env.SMS_TEMPLATE_CODE || '',
-  // MCP SMS config (阿里云市场 MCP 服务)
-  mcpUrl: process.env.SMS_MCP_URL || '',
-  mcpTemplateId: process.env.SMS_MCP_TEMPLATE_ID || 'lxym_20111_sdgsfhwqgvyh',
+  provider: process.env.SMS_PROVIDER || 'mock', // 'market' | 'mock'
+  // 阿里云市场短信服务 (cmapi00067513)
+  appCode: process.env.SMS_APP_CODE || '',
+  templateId: process.env.SMS_TEMPLATE_ID || 'lxym_20111_sdgsfhwqgvyh',
+  marketHost: process.env.SMS_MARKET_HOST || 'smsapi.market.alicloudapi.com',
+  marketPath: process.env.SMS_MARKET_PATH || '/sms/send',
   // Rate limiting
   codeLength: parseInt(process.env.SMS_CODE_LENGTH || '6', 10),
-  codeTtlSeconds: parseInt(process.env.SMS_CODE_TTL || '300', 10),   // 5 minutes
-  codeCooldownSeconds: parseInt(process.env.SMS_CODE_COOLDOWN || '60', 10), // 1 minute between sends
+  codeTtlSeconds: parseInt(process.env.SMS_CODE_TTL || '300', 10),
+  codeCooldownSeconds: parseInt(process.env.SMS_CODE_COOLDOWN || '60', 10),
   maxSendPerDay: parseInt(process.env.SMS_MAX_SEND_PER_DAY || '10', 10),
 }));
