@@ -179,19 +179,20 @@ export class SmsService {
   // ── Market SMS via Alibaba Cloud API Gateway (APPCODE auth) ──
 
   private sendViaMarket(phone: string, code: string): Promise<void> {
-    const params = querystring.stringify({
+    const body = querystring.stringify({
       mobile: phone,
-      templateId: this.templateId,
-      param: `code:${code}`,
+      templateid: this.templateId,
+      content: `code:${code}`,
     });
 
     const options = {
       hostname: this.marketHost,
-      path: `${this.marketPath}?${params}`,
-      method: 'GET',
+      path: this.marketPath,
+      method: 'POST',
       headers: {
         'Authorization': `APPCODE ${this.appCode}`,
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'Content-Length': Buffer.byteLength(body),
       },
     };
 
@@ -238,6 +239,7 @@ export class SmsService {
         reject(new Error('Market API request timed out'));
       });
 
+      req.write(body);
       req.end();
     });
   }
