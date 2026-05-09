@@ -248,7 +248,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(children: [
-            Icon(Icons.cloud_sync_outlined, size: 26.sp, color: AppColors.primary),
+            Image.asset('assets/logo.png', width: 30.w, height: 30.w),
             SizedBox(width: AppSpacing.sm.w),
             Text(
               '端云智采',

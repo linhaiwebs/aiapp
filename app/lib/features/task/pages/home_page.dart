@@ -160,7 +160,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(AppRadius.full),
             ),
-            child: Icon(Icons.cloud_sync_outlined, size: 20.sp, color: AppColors.primary),
+            child: Image.asset('assets/logo.png', width: 24.w, height: 24.w),
           ),
           SizedBox(width: AppSpacing.sm.w),
           Text(

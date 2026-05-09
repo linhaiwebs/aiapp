@@ -111,10 +111,10 @@ class _SplashPageState extends ConsumerState<SplashPage>
                     ),
                   ),
                   child: Center(
-                    child: Icon(
-                      Icons.cloud_sync_outlined,
-                      size: 56.sp,
-                      color: AppColors.primary,
+                    child: Image.asset(
+                      'assets/logo.png',
+                      width: 64.w,
+                      height: 64.w,
                     ),
                   ),
                 ),

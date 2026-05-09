@@ -142,10 +142,10 @@ class _LoginPageState extends ConsumerState<LoginPage> with SingleTickerProvider
               Center(
                 child: Column(
                   children: [
-                    Icon(
-                      Icons.cloud_sync_outlined,
-                      size: 40.sp,
-                      color: AppColors.primary,
+                    Image.asset(
+                      'assets/logo.png',
+                      width: 48.w,
+                      height: 48.w,
                     ),
                     SizedBox(height: 12.h),
                     Text(
