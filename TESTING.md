@@ -715,7 +715,7 @@ curl http://localhost:3000/api/admin/export/audio-links \
 
 | 项目 | 验证方式 | 通过标准 |
 |------|---------|---------|
-| 后端启动 | `curl https://cai.lhwebs.com/` | 返回 JSON 含 name/version |
+| 后端启动 | `curl https://blackend.duanfukeji.com/` | 返回 JSON 含 name/version |
 | API 文档 | 访问 `/api/docs` | Swagger 页面正常显示 |
 | 管理后台 | 访问 `/admin/` | 登录页面正常显示 |
 | 管理员登录 | 输入 13800000000 / admin123 | 登录成功进入 Dashboard |

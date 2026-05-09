@@ -1,0 +1,16 @@
+{
+  "name": "xcai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,admin -c blue,green \"cd server && npm run start:dev\" \"cd admin && npm run dev\"",
+    "build": "cd server && npm run build && cd ../admin && npm run build",
+    "start": "cd server && npm run start:prod"
+  },
+  "dependencies": {
+    "undici": "^8.2.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
