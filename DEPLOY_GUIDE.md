@@ -382,8 +382,8 @@ server {
 ```
 ┌──────────────────────────────────────────────────┐
 │  客户端                                          │
-│  APP ──→ https://blackend.duanfukeji.com/api/             │
-│  Admin ──→ https://blackend.duanfukeji.com/admin/         │
+│  APP ──→ https://111.170.11.245/api/             │
+│  Admin ──→ https://111.170.11.245/admin/         │
 │                    │                              │
 │                    ▼                              │
 │  ┌──────────────────────────────┐                │
@@ -437,18 +437,18 @@ docker-compose -f docker-compose.host-nginx.yml up -d
 
 #### 步骤 2：宝塔 Nginx 配置
 
-1. 宝塔 → 网站 → 添加站点 → 填入域名 `blackend.duanfukeji.com`
+1. 宝塔 → 网站 → 添加站点 → 填入域名 `111.170.11.245`
 2. 站点设置 → 配置文件 → 替换为：
 
 ```nginx
 server {
     listen 80;
     listen 443 ssl http2;
-    server_name blackend.duanfukeji.com;
+    server_name 111.170.11.245;
 
     # SSL（宝塔自动管理，或手动配置）
-    # ssl_certificate     /www/server/ssl/blackend.duanfukeji.com/fullchain.pem;
-    # ssl_certificate_key /www/server/ssl/blackend.duanfukeji.com/privkey.pem;
+    # ssl_certificate     /www/server/ssl/111.170.11.245/fullchain.pem;
+    # ssl_certificate_key /www/server/ssl/111.170.11.245/privkey.pem;
 
     client_max_body_size 500M;
 
@@ -513,11 +513,11 @@ server {
 
 ```bash
 flutter build apk --release \
-  --dart-define=API_BASE_URL=https://blackend.duanfukeji.com/api
+  --dart-define=API_BASE_URL=https://111.170.11.245/api
 ```
 
 > 80/443 端口可省略。如使用自定义端口（如 8443），则：
-> `--dart-define=API_BASE_URL=https://blackend.duanfukeji.com:8443/api`
+> `--dart-define=API_BASE_URL=https://111.170.11.245:8443/api`
 
 ---
 
@@ -541,7 +541,7 @@ Nginx 配置与方案 A 完全相同。
 ```
 ┌──────────────────────────────────────────────────┐
 │  客户端                                          │
-│  APP ──→ https://blackend.duanfukeji.com/api/             │
+│  APP ──→ https://111.170.11.245/api/             │
 │                    │                              │
 │                    ▼ NGINX_HTTP_PORT=80           │
 │  ┌──────────────────────────────┐                │
@@ -585,8 +585,8 @@ APP 的 `API_BASE_URL` 必须指向 **宿主机 Nginx 对外地址**，不直接
 
 | 部署方式 | APP 编译参数 |
 |---------|-------------|
-| 宿主机 Nginx (443) | `--dart-define=API_BASE_URL=https://blackend.duanfukeji.com/api` |
-| 宿主机 Nginx (自定义端口) | `--dart-define=API_BASE_URL=https://blackend.duanfukeji.com:8443/api` |
+| 宿主机 Nginx (443) | `--dart-define=API_BASE_URL=https://111.170.11.245/api` |
+| 宿主机 Nginx (自定义端口) | `--dart-define=API_BASE_URL=https://111.170.11.245:8443/api` |
 | Docker Nginx (8080) | `--dart-define=API_BASE_URL=http://your-ip:8080/api` |
 | 内网 HTTP | `--dart-define=API_BASE_URL=http://192.168.1.100:3000/api` |
 
@@ -600,8 +600,8 @@ APP 内「设置 → 服务器设置」可动态切换 API 地址，无需重新
 
 | 场景 | .env 配置 | APP API_BASE_URL |
 |------|----------|-----------------|
-| 宝塔 + HTTPS | `SERVER_PORT=3000` | `https://blackend.duanfukeji.com/api` |
-| 宝塔 + 自定义端口 | `SERVER_PORT=3000` | `https://blackend.duanfukeji.com:8443/api` |
+| 宝塔 + HTTPS | `SERVER_PORT=3000` | `https://111.170.11.245/api` |
+| 宝塔 + 自定义端口 | `SERVER_PORT=3000` | `https://111.170.11.245:8443/api` |
 | Docker Nginx | `NGINX_HTTP_PORT=8080` | `http://your-ip:8080/api` |
 | 直连后端(调试) | `SERVER_PORT=3000` | `http://your-ip:3000/api` |
 
