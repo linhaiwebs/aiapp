@@ -62,7 +62,12 @@ export const jwtConfig = registerAs('jwt', () => ({
 }));
 
 export const realNameConfig = registerAs('realName', () => ({
-  mcpUrl: process.env.REAL_NAME_MCP_URL || '',
+  appCode: process.env.REAL_NAME_APP_CODE || process.env.SMS_APP_CODE || '',
+  verifyHost: process.env.REAL_NAME_VERIFY_HOST || 'zidv2.market.alicloudapi.com',
+  verifyPath: process.env.REAL_NAME_VERIFY_PATH || '/idcheck/Post',
+  ocrHost: process.env.REAL_NAME_OCR_HOST || 'zidv2.market.alicloudapi.com',
+  ocrFrontPath: process.env.REAL_NAME_OCR_FRONT_PATH || '/thirdnode/ImageAI/idcardfrontrecongnition',
+  ocrBackPath: process.env.REAL_NAME_OCR_BACK_PATH || '/thirdnode/ImageAI/idcardbackrecongnition',
 }));
 
 export const smsConfig = registerAs('sms', () => ({

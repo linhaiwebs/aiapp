@@ -1,35 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-
-// Inline type declarations to avoid compile-time dependency on @modelcontextprotocol/sdk
-interface MCPClient {
-  connect(transport: any): Promise<void>;
-  callTool(params: { name: string; arguments: Record<string, string> }): Promise<{
-    isError?: boolean;
-    content: Array<{ type: string; text: string }>;
-  }>;
-}
-interface MCPTransport {
-  new(url: URL): any;
-}
-
-// Load MCP SDK lazily — avoids crashing the module if the SDK is not installed or path differs
-let _MCPClient: any = null;
-let _SSEClientTransport: any = null;
-
-function loadMcpSdk(): boolean {
-  if (_MCPClient && _SSEClientTransport) return true;
-  try {
-    const path = require('path');
-    const mcpCjsDir = path.join(__dirname, '..', '..', '..', 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'cjs');
-    _MCPClient = require(path.join(mcpCjsDir, 'client', 'index.js')).Client;
-    _SSEClientTransport = require(path.join(mcpCjsDir, 'client', 'sse.js')).SSEClientTransport;
-    return true;
-  } catch (e: any) {
-    console.warn('[RealName] MCP SDK not available, will use mock mode. Error:', e.message);
-    return false;
-  }
-}
+import * as https from 'https';
 
 export interface OcrFrontResult {
   name: string;
@@ -55,217 +26,166 @@ export interface VerifyResult {
 
 @Injectable()
 export class RealNameService {
-  private mcpClient: MCPClient | null = null;
-  private mcpTransport: MCPTransport | null = null;
-  private mcpConnected = false;
-  private readonly mcpUrl: string;
+  private readonly appCode: string;
+  private readonly verifyHost: string;
+  private readonly verifyPath: string;
+  private readonly ocrHost: string;
+  private readonly ocrFrontPath: string;
+  private readonly ocrBackPath: string;
+  private readonly enabled: boolean;
 
   constructor(private configService: ConfigService) {
-    this.mcpUrl = this.configService.get<string>('realName.mcpUrl', '');
-    if (!this.mcpUrl) {
-      console.warn('[RealName] MCP URL is empty, real-name verification will use mock mode.');
+    this.appCode = this.configService.get<string>('realName.appCode', '');
+    this.verifyHost = this.configService.get<string>('realName.verifyHost', 'zidv2.market.alicloudapi.com');
+    this.verifyPath = this.configService.get<string>('realName.verifyPath', '/idcheck/Post');
+    this.ocrHost = this.configService.get<string>('realName.ocrHost', 'zidv2.market.alicloudapi.com');
+    this.ocrFrontPath = this.configService.get<string>('realName.ocrFrontPath', '/thirdnode/ImageAI/idcardfrontrecongnition');
+    this.ocrBackPath = this.configService.get<string>('realName.ocrBackPath', '/thirdnode/ImageAI/idcardbackrecongnition');
+    this.enabled = !!this.appCode;
+
+    if (this.enabled) {
+      console.log(`[RealName] API client initialized — host: ${this.verifyHost}`);
+    } else {
+      console.warn('[RealName] appCode not configured, will use mock mode.');
     }
   }
 
-  private async ensureConnected(): Promise<void> {
-    if (this.mcpConnected) return;
-
-    if (!this.mcpUrl) {
-      throw new BadRequestException('实名认证服务未配置');
-    }
-
-    if (!loadMcpSdk()) {
-      throw new BadRequestException('实名认证服务组件未安装');
-    }
-
-    try {
-      this.mcpTransport = new _SSEClientTransport(new URL(this.mcpUrl));
-      this.mcpClient = new _MCPClient(
-        { name: 'xcai-realname', version: '1.0.0' },
-        { capabilities: {} },
-      );
-      await this.mcpClient!.connect(this.mcpTransport);
-      this.mcpConnected = true;
-      console.log('[RealName] MCP client connected');
-    } catch (error) {
-      console.error('[RealName] MCP connection failed:', error);
-      throw new BadRequestException('实名认证服务连接失败');
-    }
-  }
-
-  /** OCR recognize front side of ID card */
   async ocrFront(base64Str: string): Promise<OcrFrontResult> {
     if (!base64Str) throw new BadRequestException('请提供身份证正面照片');
 
-    if (!this.mcpUrl) {
+    if (!this.enabled) {
       return this.mockOcrFront();
     }
 
-    await this.ensureConnected();
-
     try {
-      const result = await this.mcpClient!.callTool({
-        name: '身份证OCR正面识别',
-        arguments: { base64Str },
-      });
-
-      if (result.isError) {
-        const errText = result.content
-          .filter((c: any) => c.type === 'text')
-          .map((c: any) => c.text)
-          .join('; ');
-        console.error('[RealName] OCR front failed:', errText);
-        throw new BadRequestException(`身份证正面识别失败: ${errText || '未知错误'}`);
-      }
-
-      const textContent = result.content
-        .filter((c: any) => c.type === 'text')
-        .map((c: any) => c.text)
-        .join('\n');
-
-      const parsed = this.parseOcrFrontResult(textContent);
+      const body = JSON.stringify({ base64Str });
+      const data = await this.httpPost(this.ocrHost, this.ocrFrontPath, body);
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
       console.log('[RealName] OCR front success');
-      return parsed;
+      return {
+        name: parsed.name || parsed.Name || '',
+        idNumber: parsed.idNumber || parsed.IdNumber || parsed.num || parsed.cardNo || '',
+        birthDate: parsed.birthDate || parsed.BirthDate || parsed.birth || '',
+        validFrom: parsed.validFrom || parsed.ValidFrom || parsed.startDate || '',
+        validTo: parsed.validTo || parsed.ValidTo || parsed.endDate || '',
+        raw: parsed,
+      };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      this.mcpConnected = false;
       console.error('[RealName] OCR front error:', error);
       throw new BadRequestException('身份证正面识别失败，请重试');
     }
   }
 
-  /** OCR recognize back side of ID card */
   async ocrBack(base64Str: string): Promise<OcrBackResult> {
     if (!base64Str) throw new BadRequestException('请提供身份证反面照片');
 
-    if (!this.mcpUrl) {
+    if (!this.enabled) {
       return this.mockOcrBack();
     }
 
-    await this.ensureConnected();
-
     try {
-      const result = await this.mcpClient!.callTool({
-        name: '身份证OCR反面识别',
-        arguments: { base64Str },
-      });
-
-      if (result.isError) {
-        const errText = result.content
-          .filter((c: any) => c.type === 'text')
-          .map((c: any) => c.text)
-          .join('; ');
-        console.error('[RealName] OCR back failed:', errText);
-        throw new BadRequestException(`身份证反面识别失败: ${errText || '未知错误'}`);
-      }
-
-      const textContent = result.content
-        .filter((c: any) => c.type === 'text')
-        .map((c: any) => c.text)
-        .join('\n');
-
-      const parsed = this.parseOcrBackResult(textContent);
+      const body = JSON.stringify({ base64Str });
+      const data = await this.httpPost(this.ocrHost, this.ocrBackPath, body);
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
       console.log('[RealName] OCR back success');
-      return parsed;
+      return {
+        validFrom: parsed.validFrom || parsed.ValidFrom || parsed.startDate || '',
+        validTo: parsed.validTo || parsed.ValidTo || parsed.endDate || '',
+        issuingAuthority: parsed.issuingAuthority || parsed.IssuingAuthority || parsed.authority || '',
+        raw: parsed,
+      };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      this.mcpConnected = false;
       console.error('[RealName] OCR back error:', error);
       throw new BadRequestException('身份证反面识别失败，请重试');
     }
   }
 
-  /** Verify identity by name + ID number against official database */
   async verifyIdentity(cardNo: string, realName: string): Promise<VerifyResult> {
     if (!cardNo || !realName) throw new BadRequestException('请提供姓名和身份证号');
 
-    if (!this.mcpUrl) {
+    if (!this.enabled) {
       return this.mockVerify(cardNo, realName);
     }
 
-    await this.ensureConnected();
-
     try {
-      const result = await this.mcpClient!.callTool({
-        name: '身份证实名认证接口',
-        arguments: { cardNo, realName },
-      });
+      const body = JSON.stringify({ cardNo, realName });
+      const data = await this.httpPost(this.verifyHost, this.verifyPath, body);
+      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
 
-      if (result.isError) {
-        const errText = result.content
-          .filter((c: any) => c.type === 'text')
-          .map((c: any) => c.text)
-          .join('; ');
-        console.error('[RealName] Verify failed:', errText);
-        throw new BadRequestException(`实名认证失败: ${errText || '未知错误'}`);
-      }
+      // Handle various response formats
+      const code = parsed.code || parsed.status || parsed.returnCode || '';
+      const msg = parsed.message || parsed.msg || parsed.desc || '';
+      const match =
+        code === '0' || code === '00' || code === '200' ||
+        parsed.isMatch === true || parsed.match === true ||
+        String(msg).includes('一致') || String(msg).includes('通过');
 
-      const textContent = result.content
-        .filter((c: any) => c.type === 'text')
-        .map((c: any) => c.text)
-        .join('\n');
-
-      const parsed = this.parseVerifyResult(textContent);
-      console.log('[RealName] Verify success, match:', parsed.match);
-      return parsed;
+      console.log('[RealName] Verify result:', match ? 'MATCH' : 'NO MATCH', msg);
+      return {
+        match,
+        message: msg || (match ? '认证通过' : '认证不通过'),
+        raw: parsed,
+      };
     } catch (error) {
       if (error instanceof BadRequestException) throw error;
-      this.mcpConnected = false;
       console.error('[RealName] Verify error:', error);
       throw new BadRequestException('实名认证请求失败，请重试');
     }
   }
 
-  private parseOcrFrontResult(text: string): OcrFrontResult {
-    try {
-      const data = JSON.parse(text);
-      return {
-        name: data.name || data.Name || '',
-        idNumber: data.idNumber || data.IdNumber || data.num || '',
-        birthDate: data.birthDate || data.BirthDate || data.birth || '',
-        validFrom: data.validFrom || data.ValidFrom || data.startDate || '',
-        validTo: data.validTo || data.ValidTo || data.endDate || '',
-        raw: data,
+  // ── HTTP helper ──
+
+  private httpPost(hostname: string, path: string, body: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname,
+        path,
+        method: 'POST',
+        headers: {
+          'Authorization': `APPCODE ${this.appCode}`,
+          'Content-Type': 'application/json; charset=UTF-8',
+          'Content-Length': Buffer.byteLength(body),
+        },
       };
-    } catch {
-      return { name: '', idNumber: '', birthDate: '', validFrom: '', validTo: '', raw: { text } };
-    }
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => data += chunk.toString());
+        res.on('end', () => {
+          console.log(`[RealName] API response: ${res.statusCode} — ${data.substring(0, 200)}`);
+          if (res.statusCode === 200) {
+            try {
+              resolve(JSON.parse(data));
+            } catch {
+              resolve(data);
+            }
+          } else {
+            reject(new Error(`API returned status ${res.statusCode}: ${data.substring(0, 200)}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        console.error('[RealName] API request failed:', error.message);
+        reject(new Error(`API request failed: ${error.message}`));
+      });
+
+      req.setTimeout(15000, () => {
+        req.destroy();
+        reject(new Error('API request timed out'));
+      });
+
+      req.write(body);
+      req.end();
+    });
   }
 
-  private parseOcrBackResult(text: string): OcrBackResult {
-    try {
-      const data = JSON.parse(text);
-      return {
-        validFrom: data.validFrom || data.ValidFrom || data.startDate || '',
-        validTo: data.validTo || data.ValidTo || data.endDate || '',
-        issuingAuthority: data.issuingAuthority || data.IssuingAuthority || data.authority || '',
-        raw: data,
-      };
-    } catch {
-      return { validFrom: '', validTo: '', issuingAuthority: '', raw: { text } };
-    }
-  }
-
-  private parseVerifyResult(text: string): VerifyResult {
-    try {
-      const data = JSON.parse(text);
-      const match = data.match === true || data.isMatch === true || data.code === '0' || data.result === '1';
-      return {
-        match,
-        message: data.message || data.msg || (match ? '认证通过' : '认证不通过'),
-        raw: data,
-      };
-    } catch {
-      const lower = text.toLowerCase();
-      const match = lower.includes('一致') || lower.includes('通过') || lower.includes('true') || lower.includes('success');
-      return { match, message: text.substring(0, 200), raw: { text } };
-    }
-  }
-
-  // Mock implementations for development without MCP URL
+  // ── Mock fallbacks ──
 
   private mockOcrFront(): OcrFrontResult {
-    console.log('[RealName] MOCK OCR front — returning dummy data');
+    console.log('[RealName] MOCK OCR front');
     return {
       name: '张三',
       idNumber: '110101199001011234',
@@ -276,7 +196,7 @@ export class RealNameService {
   }
 
   private mockOcrBack(): OcrBackResult {
-    console.log('[RealName] MOCK OCR back — returning dummy data');
+    console.log('[RealName] MOCK OCR back');
     return {
       validFrom: '2020-01-01',
       validTo: '2040-01-01',
