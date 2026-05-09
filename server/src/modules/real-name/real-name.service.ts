@@ -13,11 +13,23 @@ interface MCPTransport {
   new(url: URL): any;
 }
 
-// Load MCP SDK via direct filesystem path
-const path = require('path');
-const mcpCjsDir = path.join(__dirname, '..', '..', '..', 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'cjs');
-const { Client: MCPClient } = require(path.join(mcpCjsDir, 'client', 'index.js'));
-const { SSEClientTransport } = require(path.join(mcpCjsDir, 'client', 'sse.js'));
+// Load MCP SDK lazily — avoids crashing the module if the SDK is not installed or path differs
+let _MCPClient: any = null;
+let _SSEClientTransport: any = null;
+
+function loadMcpSdk(): boolean {
+  if (_MCPClient && _SSEClientTransport) return true;
+  try {
+    const path = require('path');
+    const mcpCjsDir = path.join(__dirname, '..', '..', '..', 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'cjs');
+    _MCPClient = require(path.join(mcpCjsDir, 'client', 'index.js')).Client;
+    _SSEClientTransport = require(path.join(mcpCjsDir, 'client', 'sse.js')).SSEClientTransport;
+    return true;
+  } catch (e: any) {
+    console.warn('[RealName] MCP SDK not available, will use mock mode. Error:', e.message);
+    return false;
+  }
+}
 
 export interface OcrFrontResult {
   name: string;
@@ -62,9 +74,13 @@ export class RealNameService {
       throw new BadRequestException('实名认证服务未配置');
     }
 
+    if (!loadMcpSdk()) {
+      throw new BadRequestException('实名认证服务组件未安装');
+    }
+
     try {
-      this.mcpTransport = new SSEClientTransport(new URL(this.mcpUrl));
-      this.mcpClient = new MCPClient(
+      this.mcpTransport = new _SSEClientTransport(new URL(this.mcpUrl));
+      this.mcpClient = new _MCPClient(
         { name: 'xcai-realname', version: '1.0.0' },
         { capabilities: {} },
       );

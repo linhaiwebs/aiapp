@@ -16,12 +16,23 @@ interface MCPTransport {
   new(url: URL): any;
 }
 
-// Load MCP SDK via direct filesystem path — bypasses Node.js v22 exports-field resolution.
-// The SDK's CJS main entry is broken (missing dist/cjs/index.js), so we resolve from __dirname.
-const path = require('path');
-const mcpCjsDir = path.join(__dirname, '..', '..', '..', 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'cjs');
-const { Client: MCPClient } = require(path.join(mcpCjsDir, 'client', 'index.js'));
-const { SSEClientTransport } = require(path.join(mcpCjsDir, 'client', 'sse.js'));
+// Load MCP SDK lazily — avoids crashing the module if the SDK is not installed or path differs
+let _MCPClient: any = null;
+let _SSEClientTransport: any = null;
+
+function loadMcpSdk(): boolean {
+  if (_MCPClient && _SSEClientTransport) return true;
+  try {
+    const path = require('path');
+    const mcpCjsDir = path.join(__dirname, '..', '..', '..', 'node_modules', '@modelcontextprotocol', 'sdk', 'dist', 'cjs');
+    _MCPClient = require(path.join(mcpCjsDir, 'client', 'index.js')).Client;
+    _SSEClientTransport = require(path.join(mcpCjsDir, 'client', 'sse.js')).SSEClientTransport;
+    return true;
+  } catch (e: any) {
+    console.warn('[SMS] MCP SDK not available, MCP provider will fall back to mock. Error:', e.message);
+    return false;
+  }
+}
 
 interface SmsRecord {
   code: string;
@@ -91,9 +102,11 @@ export class SmsService {
     } else if (this.provider === 'mcp') {
       if (!this.mcpUrl) {
         console.warn('[SMS] MCP SMS configured but mcpUrl is empty. Falling back to mock mode.');
+      } else if (!loadMcpSdk()) {
+        console.warn('[SMS] MCP SDK failed to load. Falling back to mock mode.');
       } else {
-        this.mcpTransport = new SSEClientTransport(new URL(this.mcpUrl));
-        this.mcpClient = new MCPClient(
+        this.mcpTransport = new _SSEClientTransport(new URL(this.mcpUrl));
+        this.mcpClient = new _MCPClient(
           { name: 'xcai-server', version: '1.0.0' },
           { capabilities: {} },
         );
@@ -124,24 +137,28 @@ export class SmsService {
 
     const code = this.generateCode();
 
+    let activeProvider: string;
+
     if (this.provider === 'aliyun' && this.aliyunClient) {
       await this.sendViaAliyun(phone, code);
+      activeProvider = 'aliyun';
     } else if (this.provider === 'mcp' && this.mcpClient && this.mcpUrl) {
-      await this.sendViaMcp(phone, code);
+      try {
+        await this.sendViaMcp(phone, code);
+        activeProvider = 'mcp';
+      } catch (mcpError: any) {
+        console.warn(`[SMS] MCP send failed, falling back to mock. Error: ${mcpError.message}`);
+        console.log(`[SMS MOCK] Phone: ${phone}, Code: ${code}`);
+        activeProvider = 'mock';
+      }
     } else {
       console.log(`[SMS MOCK] Phone: ${phone}, Code: ${code}`);
+      activeProvider = 'mock';
     }
 
     // Store code
     this.store.set(phone, { code, sentAt: Date.now(), verified: false });
     this.dailyCount.set(phone, dailySent + 1);
-
-    // Record log
-    const activeProvider = this.provider === 'aliyun' && this.aliyunClient
-      ? 'aliyun'
-      : this.provider === 'mcp' && this.mcpClient && this.mcpUrl
-        ? 'mcp'
-        : 'mock';
     this.addLog({
       phone,
       code,
