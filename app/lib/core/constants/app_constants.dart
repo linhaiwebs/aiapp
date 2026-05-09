@@ -9,7 +9,7 @@ const int kDefaultApiPort = 3000;
 /// - Android 模拟器: 10.0.2.2 映射到宿主机 localhost
 /// - iOS 模拟器: localhost 直接访问宿主机
 /// - 真机: 需要在 APP 内「设置→服务器设置」填写实际地址
-/// - 编译参数覆盖: flutter build apk --dart-define=API_BASE_URL=http://111.170.11.245/api
+/// - 编译参数覆盖: flutter build apk --dart-define=API_BASE_URL=https://cai.lhwebs.com/api
 String get defaultApiBaseUrl {
   // 编译参数优先
   const fromEnv = String.fromEnvironment('API_BASE_URL');
