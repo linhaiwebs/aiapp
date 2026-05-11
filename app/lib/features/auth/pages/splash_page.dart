@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/storage/auth_storage.dart';
+import '../../../core/services/update_service.dart';
 
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
@@ -25,6 +26,11 @@ class _SplashPageState extends ConsumerState<SplashPage> {
     await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
 
+    // 检查版本更新
+    final updateInfo = await ref.read(updateServiceProvider).checkUpdate();
+
+    if (!mounted) return;
+
     final authStorage = ref.read(authStorageProvider);
     final token = await authStorage.getToken();
 
@@ -35,15 +41,27 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
     if (!mounted) return;
 
-    if (!shown) {
-      context.go('/onboarding');
+    // 强制更新 → 停留在 splash 并弹窗
+    if (updateInfo != null && updateInfo.forceUpdate) {
+      if (mounted) {
+        UpdateService.showUpdateDialog(context, updateInfo);
+      }
       return;
     }
 
-    if (token != null && token != 'undefined') {
+    if (!shown) {
+      context.go('/onboarding');
+    } else if (token != null && token != 'undefined') {
       context.go('/home');
     } else {
       context.go('/login');
+    }
+
+    // 可选更新 → 延迟弹窗
+    if (updateInfo != null && mounted) {
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) UpdateService.showUpdateDialog(context, updateInfo);
+      });
     }
   }
 

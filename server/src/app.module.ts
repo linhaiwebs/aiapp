@@ -16,6 +16,7 @@ import { TextCollectionModule } from './modules/text-collection/text-collection.
 import { SmsModule } from './modules/sms/sms.module';
 import { RealNameModule } from './modules/real-name/real-name.module';
 import { SeedModule } from './modules/seed/seed.module';
+import { AppVersionModule } from './modules/app/app.module';
 import { appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsConfig, realNameConfig } from './config';
 
 @Module({
@@ -73,6 +74,7 @@ import { appConfig, databaseConfig, redisConfig, storageConfig, jwtConfig, smsCo
     SmsModule,
     RealNameModule,
     SeedModule,
+    AppVersionModule,
   ],
 })
 export class AppModule {}
