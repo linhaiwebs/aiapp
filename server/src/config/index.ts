@@ -26,7 +26,7 @@ export const databaseConfig = registerAs('database', () => {
     username: process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.DB_DATABASE || 'xcai',
-    synchronize: process.env.DB_SYNCHRONIZE === 'true',
+    synchronize: process.env.DB_SYNCHRONIZE !== 'false',
     logging: process.env.DB_LOGGING === 'true',
   };
 });
