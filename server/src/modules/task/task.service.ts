@@ -60,7 +60,7 @@ export class TaskService {
     }
   }
 
-  async findAll(filter: TaskFilterDto, userId?: string) {
+  async findAll(filter: TaskFilterDto, userId?: string, userRole?: string) {
     const {
       type, status, difficulty, minPrice, maxPrice,
       region, language, categoryId, projectId, keyword,
@@ -72,15 +72,14 @@ export class TaskService {
       .leftJoinAndSelect('task.category', 'category')
       .leftJoinAndSelect('task.project', 'project');
 
-    // 团队隔离：用户只能看到自己所属团队的任务
-    if (userId) {
+    // 团队隔离：普通用户只能看到自己所属团队的任务，超管看全部
+    if (userId && userRole !== 'super_admin') {
       const memberships = await this.teamMemberRepository.find({
         where: { userId, status: MemberStatus.APPROVED },
         select: ['teamId'],
       });
       const teamIds = memberships.map((m) => m.teamId);
       if (teamIds.length === 0) {
-        // 无团队的用戶看不到任何任务
         queryBuilder.andWhere('1 = 0');
       } else {
         queryBuilder.andWhere('task.teamId IN (:...teamIds)', { teamIds });
@@ -158,7 +157,7 @@ export class TaskService {
   }
 
   /** 采集员申请任务（需审核员审批） */
-  async claim(userId: string, taskId: string): Promise<TaskClaim> {
+  async claim(userId: string, taskId: string, userRole?: string): Promise<TaskClaim> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('用户不存在');
     if (user.status === UserStatus.BLACKLISTED) {
@@ -180,10 +179,10 @@ export class TaskService {
       throw new ForbiddenException('质量分不足，无法申请此任务');
     }
 
-    // Check team membership if task is team-scoped
-    if (task.teamId) {
+    // Check team membership if task is team-scoped (super admin bypasses)
+    if (task.teamId && userRole !== 'super_admin') {
       const membership = await this.teamMemberRepository.findOne({
-        where: { teamId: task.teamId, userId },
+        where: { teamId: task.teamId, userId, status: MemberStatus.APPROVED },
       });
       if (!membership) {
         throw new ForbiddenException('仅团队成员可领取此任务');
@@ -315,7 +314,7 @@ export class TaskService {
     });
   }
 
-  async search(keyword: string, page = 1, pageSize = 20, userId?: string) {
+  async search(keyword: string, page = 1, pageSize = 20, userId?: string, userRole?: string) {
     const queryBuilder = this.taskRepository
       .createQueryBuilder('task')
       .where(
@@ -323,7 +322,7 @@ export class TaskService {
         { keyword: `%${keyword}%`, id: keyword, status: TaskStatus.PUBLISHED },
       );
 
-    if (userId) {
+    if (userId && userRole !== 'super_admin') {
       const memberships = await this.teamMemberRepository.find({
         where: { userId, status: MemberStatus.APPROVED },
         select: ['teamId'],

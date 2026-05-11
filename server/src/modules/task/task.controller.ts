@@ -33,10 +33,11 @@ export class TaskController {
   @ApiOperation({ summary: '搜索任务（团队隔离）' })
   async search(
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
     @Query('keyword') keyword: string,
     @Query('page') page: number = 1,
   ) {
-    const [items, total] = await this.taskService.search(keyword, Number(page), 20, userId);
+    const [items, total] = await this.taskService.search(keyword, Number(page), 20, userId, role);
     return { items, total };
   }
 
@@ -99,8 +100,9 @@ export class TaskController {
   async findAll(
     @Query() filter: TaskFilterDto,
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    return this.taskService.findAll(filter, userId);
+    return this.taskService.findAll(filter, userId, role);
   }
 
   @Get(':id')
@@ -144,8 +146,9 @@ export class TaskController {
   async claim(
     @Param('id') taskId: string,
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    return this.taskService.claim(userId, taskId);
+    return this.taskService.claim(userId, taskId, role);
   }
 
   @Post(':id/abandon')
