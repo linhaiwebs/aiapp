@@ -37,6 +37,12 @@ export enum TaskDifficulty {
   HARD = 'hard',
 }
 
+export enum TaskReviewStatus {
+  PENDING_REVIEW = 'pending_review',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+}
+
 export enum QcMethod {
   SPOT_CHECK = 'spot_check',
   MANUAL_SPOT_CHECK = 'manual_spot_check',
@@ -253,6 +259,13 @@ export class Task {
 
   @Column({ default: 0 })
   sortOrder: number;
+
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: TaskReviewStatus.APPROVED,
+  })
+  reviewStatus: TaskReviewStatus;
 
   @CreateDateColumn()
   createdAt: Date;

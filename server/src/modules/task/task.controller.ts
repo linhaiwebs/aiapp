@@ -115,9 +115,13 @@ export class TaskController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @ApiOperation({ summary: '创建任务' })
-  async create(@Body() dto: CreateTaskDto) {
-    return this.taskService.create(dto);
+  @ApiOperation({ summary: '创建任务（团长创建需后台审核）' })
+  async create(
+    @Body() dto: CreateTaskDto,
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
+  ) {
+    return this.taskService.create(dto, userId, role);
   }
 
   @Patch(':id')
@@ -187,6 +191,34 @@ export class TaskController {
     @Body('reason') reason?: string,
   ) {
     return this.taskService.rejectClaim(claimId, reviewerId, reason);
+  }
+
+  @Get('pending-review')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '待审核的任务（团长创建）' })
+  async getPendingReviewTasks(
+    @Query('page') page = 1,
+    @Query('pageSize') pageSize = 20,
+    @Query('teamId') teamId?: string,
+  ) {
+    return this.taskService.findPendingReviewTasks(page, pageSize, teamId);
+  }
+
+  @Post(':id/review')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '审核任务（通过/驳回）' })
+  async reviewTask(
+    @Param('id') id: string,
+    @CurrentUser('userId') reviewerId: string,
+    @Body('action') action: 'approve' | 'reject',
+    @Body('projectId') projectId?: string,
+    @Body('reason') reason?: string,
+  ) {
+    return this.taskService.reviewTask(id, reviewerId, action, { projectId, reason });
   }
 
   @Delete('data/all')

@@ -55,9 +55,16 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('申请失败: $e'), backgroundColor: AppColors.error),
-        );
+        final msg = e.toString();
+        if (msg.contains('已申请') || msg.contains('已领取')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('您已领取过该任务，可在"我的任务"中查看'), backgroundColor: AppColors.orange),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('领取失败，请稍后重试'), backgroundColor: AppColors.error),
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _isApplying = false);

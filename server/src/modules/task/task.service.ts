@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, In } from 'typeorm';
-import { Task, TaskClaim, TaskStatus, ClaimStatus, User, UserStatus, TeamMember, MemberStatus, Project } from '../../entities';
+import { Task, TaskClaim, TaskStatus, TaskReviewStatus, ClaimStatus, User, UserStatus, TeamMember, MemberStatus, TeamMemberRole, Project } from '../../entities';
 import { CreateTaskDto, UpdateTaskDto, TaskFilterDto } from './dto';
 
 @Injectable()
@@ -24,7 +24,7 @@ export class TaskService {
     private projectRepository: Repository<Project>,
   ) {}
 
-  async create(dto: CreateTaskDto): Promise<Task> {
+  async create(dto: CreateTaskDto, userId?: string, userRole?: string): Promise<Task> {
     const cleanDto = Object.fromEntries(
       Object.entries(dto).filter(([, v]) => v !== null && v !== undefined),
     );
@@ -51,6 +51,13 @@ export class TaskService {
       delete cleanDto.gainDetection;
       delete cleanDto.signalDetection;
     }
+
+    // 团长创建的任务默认需要后台审核，超级管理员创建的直接通过
+    if (userRole && userRole !== 'super_admin') {
+      cleanDto.reviewStatus = TaskReviewStatus.PENDING_REVIEW;
+      cleanDto.status = TaskStatus.DRAFT;
+    }
+
     try {
       const task = this.taskRepository.create(cleanDto);
       return await this.taskRepository.save(task);
@@ -109,6 +116,9 @@ export class TaskService {
         { keyword: `%${keyword}%` },
       );
     }
+
+    // 只显示已审核通过的任务
+    queryBuilder.andWhere('task.reviewStatus = :reviewStatus', { reviewStatus: TaskReviewStatus.APPROVED });
 
     queryBuilder
       .orderBy('task.sortOrder', 'ASC')
@@ -206,15 +216,37 @@ export class TaskService {
       throw new BadRequestException('您已申请或领取了此任务');
     }
 
+    // 团长领取自己团队的任务免审批，直接通过
+    let claimStatus = ClaimStatus.PENDING_APPROVAL;
+    if (task.teamId) {
+      const isLeader = await this.teamMemberRepository.findOne({
+        where: { teamId: task.teamId, userId, role: TeamMemberRole.LEADER, status: MemberStatus.APPROVED },
+      });
+      if (isLeader) {
+        claimStatus = ClaimStatus.CLAIMED;
+      }
+    }
+
     const claim = this.claimRepository.create({
       userId,
       taskId,
-      status: ClaimStatus.PENDING_APPROVAL,
+      status: claimStatus,
       claimedAt: new Date(),
       deadline: task.deadline,
     });
 
-    return this.claimRepository.save(claim);
+    const saved = await this.claimRepository.save(claim);
+
+    // 团长自领直接更新 claimedQuantity
+    if (claimStatus === ClaimStatus.CLAIMED) {
+      task.claimedQuantity = Number(task.claimedQuantity) + 1;
+      if (task.status === TaskStatus.PUBLISHED) {
+        task.status = TaskStatus.IN_PROGRESS;
+      }
+      await this.taskRepository.save(task);
+    }
+
+    return saved;
   }
 
   /** 审核员审批任务申请 */
@@ -318,8 +350,8 @@ export class TaskService {
     const queryBuilder = this.taskRepository
       .createQueryBuilder('task')
       .where(
-        '(task.title LIKE :keyword OR task.id = :id) AND task.status = :status',
-        { keyword: `%${keyword}%`, id: keyword, status: TaskStatus.PUBLISHED },
+        '(task.title LIKE :keyword OR task.id = :id) AND task.status = :status AND task.reviewStatus = :reviewStatus',
+        { keyword: `%${keyword}%`, id: keyword, status: TaskStatus.PUBLISHED, reviewStatus: TaskReviewStatus.APPROVED },
       );
 
     if (userId && userRole !== 'super_admin') {
@@ -398,6 +430,53 @@ export class TaskService {
 
     const [items, total] = await queryBuilder.getManyAndCount();
     return { items, total, page, pageSize };
+  }
+
+  /** 获取待审核的任务（团长创建，后台管理员审核） */
+  async findPendingReviewTasks(page = 1, pageSize = 20, teamId?: string) {
+    const queryBuilder = this.taskRepository
+      .createQueryBuilder('task')
+      .leftJoinAndSelect('task.team', 'team')
+      .leftJoinAndSelect('task.project', 'project')
+      .where('task.reviewStatus = :reviewStatus', { reviewStatus: TaskReviewStatus.PENDING_REVIEW });
+
+    if (teamId) {
+      queryBuilder.andWhere('task.teamId = :teamId', { teamId });
+    }
+
+    queryBuilder
+      .orderBy('task.createdAt', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+
+    const [items, total] = await queryBuilder.getManyAndCount();
+    return { items, total, page, pageSize };
+  }
+
+  /** 管理员审核任务（通过/驳回） */
+  async reviewTask(
+    id: string,
+    reviewerId: string,
+    action: 'approve' | 'reject',
+    opts?: { projectId?: string; reason?: string },
+  ): Promise<Task> {
+    const task = await this.taskRepository.findOne({ where: { id } });
+    if (!task) throw new NotFoundException('任务不存在');
+    if (task.reviewStatus !== TaskReviewStatus.PENDING_REVIEW) {
+      throw new BadRequestException('当前状态不可审核');
+    }
+
+    if (action === 'approve') {
+      task.reviewStatus = TaskReviewStatus.APPROVED;
+      task.status = TaskStatus.PUBLISHED;
+      if (opts?.projectId) {
+        task.projectId = opts.projectId;
+      }
+    } else {
+      task.reviewStatus = TaskReviewStatus.REJECTED;
+    }
+
+    return this.taskRepository.save(task);
   }
 
   /** 清除所有任务数据（包括claims和submissions） */

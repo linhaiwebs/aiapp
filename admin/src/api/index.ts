@@ -49,6 +49,9 @@ export const taskApi = {
   clearAllData: () => api.delete('/tasks/data/all'),
   batchDelete: (ids: string[]) => api.post('/tasks/batch-delete', { ids }),
   batchUpdateStatus: (ids: string[], status: string) => api.post('/tasks/batch-status', { ids, status }),
+  pendingReview: (params?: any) => api.get('/tasks/pending-review', { params }),
+  review: (id: string, data: { action: 'approve' | 'reject'; projectId?: string; reason?: string }) =>
+    api.post(`/tasks/${id}/review`, data),
 };
 
 export const userApi = {
