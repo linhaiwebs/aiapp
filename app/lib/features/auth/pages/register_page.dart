@@ -45,7 +45,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       setState(() => _countdown = 60);
       _startCountdown();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('发送失败: $e'), backgroundColor: AppColors.error));
+      String errMsg = '验证码发送失败';
+      try {
+        final dioErr = e as dynamic;
+        if (dioErr?.response?.data?['message'] != null) {
+          errMsg = dioErr.response.data['message'].toString();
+        } else if (dioErr?.message != null) {
+          errMsg = dioErr.message.toString();
+        }
+      } catch (_) {}
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(errMsg), backgroundColor: AppColors.error));
     }
   }
 

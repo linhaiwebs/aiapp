@@ -115,7 +115,16 @@ class _LoginPageState extends ConsumerState<LoginPage> with SingleTickerProvider
         else { setState(() => _countdown--); }
       });
     } catch (e) {
-      _showError('验证码发送失败，请稍后重试');
+      String errMsg = '验证码发送失败，请稍后重试';
+      try {
+        final dioErr = e as dynamic;
+        if (dioErr?.response?.data?['message'] != null) {
+          errMsg = dioErr.response.data['message'].toString();
+        } else if (dioErr?.message != null) {
+          errMsg = dioErr.message.toString();
+        }
+      } catch (_) {}
+      _showError(errMsg);
     } finally {
       if (mounted) setState(() => _isSendingSms = false);
     }
