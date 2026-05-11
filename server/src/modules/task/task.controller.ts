@@ -20,6 +20,7 @@ import { CreateTaskDto, UpdateTaskDto, TaskFilterDto } from './dto';
 import { CurrentUser, Roles } from '../../common/decorators';
 import { UserRole, TaskStatus } from '../../entities';
 import { TeamLeaderGuard } from '../../common/guards/team-leader.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('任务')
 @Controller('tasks')
@@ -70,27 +71,27 @@ export class TaskController {
   }
 
   @Post()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '创建任务' })
   async create(@Body() dto: CreateTaskDto) {
     return this.taskService.create(dto);
   }
 
   @Patch(':id')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '更新任务' })
   async update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
     return this.taskService.update(id, dto);
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: '删除任务' })
   async remove(@Param('id') id: string) {
     await this.taskService.remove(id);
@@ -147,18 +148,18 @@ export class TaskController {
   }
 
   @Delete('data/all')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
   @ApiOperation({ summary: '清除所有任务数据' })
   async clearAllData() {
     return this.taskService.clearAllTaskData();
   }
 
   @Post('batch-delete')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '批量删除任务' })
   async batchRemove(@Body('ids') ids: string[]) {
     await this.taskService.batchRemove(ids);
@@ -166,9 +167,9 @@ export class TaskController {
   }
 
   @Post('batch-status')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
   @ApiBearerAuth()
-  @UseGuards(TeamLeaderGuard)
   @ApiOperation({ summary: '批量修改任务状态' })
   async batchUpdateStatus(
     @Body('ids') ids: string[],
