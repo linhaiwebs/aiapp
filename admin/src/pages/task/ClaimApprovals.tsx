@@ -70,6 +70,9 @@ export default function ClaimApprovals() {
       title: '任务', key: 'task', render: (_: any, r: any) => r.task?.title || r.taskId?.substring(0, 8),
     },
     {
+      title: '归属团队', key: 'team', render: (_: any, r: any) => r.task?.team?.name ?? '-',
+    },
+    {
       title: '申请时间', dataIndex: 'createdAt', key: 'createdAt', width: 170,
       render: (v: string) => v ? new Date(v).toLocaleString() : '-',
     },

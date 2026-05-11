@@ -14,6 +14,12 @@ export enum TeamMemberRole {
   MEMBER = 'member',
 }
 
+export enum MemberStatus {
+  PENDING = 'pending',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+}
+
 @Entity('team_members')
 export class TeamMember {
   @PrimaryGeneratedColumn('uuid')
@@ -44,6 +50,16 @@ export class TeamMember {
     default: TeamMemberRole.MEMBER,
   })
   role: TeamMemberRole;
+
+  @Column({
+    type: 'simple-enum',
+    enum: MemberStatus,
+    default: MemberStatus.APPROVED,
+  })
+  status: MemberStatus;
+
+  @Column({ length: 500, nullable: true })
+  rejectReason: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

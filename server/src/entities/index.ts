@@ -9,6 +9,6 @@ export { Project } from './project.entity';
 export { Category } from './category.entity';
 export { FileEntity, FileStatus } from './file.entity';
 export { Team } from './team.entity';
-export { TeamMember, TeamMemberRole } from './team-member.entity';
+export { TeamMember, TeamMemberRole, MemberStatus } from './team-member.entity';
 export { TextCollection, TextFormat, TextStatus } from './text-collection.entity';
 export { TextTemplate } from './text-template.entity';

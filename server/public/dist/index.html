@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>端云智采 - 应用下载</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    color: #fff;
+  }
+  .card {
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-radius: 28px;
+    padding: 40px 32px;
+    max-width: 400px;
+    width: 100%;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 24px 80px rgba(0,0,0,0.4);
+  }
+  .logo {
+    width: 80px;
+    height: 80px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #FF7A45, #FFB59A);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    font-size: 36px;
+    box-shadow: 0 8px 32px rgba(255,122,69,0.3);
+  }
+  h1 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  .version {
+    font-size: 13px;
+    color: rgba(255,255,255,0.45);
+    margin-bottom: 24px;
+  }
+  .features {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 32px;
+    text-align: left;
+  }
+  .feature {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    color: rgba(255,255,255,0.7);
+  }
+  .feature .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #FF7A45;
+    flex-shrink: 0;
+  }
+  .size-info {
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    margin-bottom: 20px;
+  }
+  .download-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 16px;
+    background: linear-gradient(135deg, #FF7A45, #E86830);
+    border: none;
+    border-radius: 16px;
+    color: #fff;
+    font-size: 17px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 8px 24px rgba(255,122,69,0.35);
+  }
+  .download-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 32px rgba(255,122,69,0.45);
+  }
+  .download-btn:active {
+    transform: translateY(0);
+  }
+  .footer {
+    margin-top: 24px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">&#9729;</div>
+  <h1>端云智采</h1>
+  <p class="version">数据采集众包平台 · v1.0.0</p>
+
+  <div class="features">
+    <div class="feature"><span class="dot"></span>团队协作 · 任务广场</div>
+    <div class="feature"><span class="dot"></span>语音 / 图像 / 视频 / 文本采集</div>
+    <div class="feature"><span class="dot"></span>实名认证 · 收益提现</div>
+    <div class="feature"><span class="dot"></span>团队审批 · 数据管理</div>
+  </div>
+
+  <p class="size-info">Android APK · 约 54 MB</p>
+
+  <a class="download-btn" href="/dist/端云智采.apk" download>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+      <polyline points="7 10 12 15 17 10"/>
+      <line x1="12" y1="15" x2="12" y2="3"/>
+    </svg>
+    下载 Android 应用
+  </a>
+
+  <p class="footer">适用于 Android 8.0+ 设备</p>
+</div>
+</body>
+</html>

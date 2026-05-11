@@ -13,6 +13,7 @@ import '../../../core/models/task_claim_model.dart';
 import '../../../core/services/task_service.dart';
 import '../../../core/services/submission_service.dart';
 import '../../../core/services/file_service.dart';
+import '../../../core/network/dio_client.dart';
 
 class CollectionWorkbenchPage extends ConsumerStatefulWidget {
   final String claimId;
@@ -195,6 +196,28 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
 
   void _removeFile(int index) {
     setState(() { _collectedFiles.removeAt(index); });
+  }
+
+  void _previewFile(String fileId, String name) {
+    final serverBase = ref.read(dioProvider).dio.options.baseUrl;
+    final url = '$serverBase/files/$fileId/stream';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.black,
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.5,
+        child: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Icon(Icons.play_circle_outline, color: Colors.white54, size: 48),
+            SizedBox(height: 16.h),
+            Text(name, style: const TextStyle(color: Colors.white, fontSize: 14), textAlign: TextAlign.center),
+            SizedBox(height: 8.h),
+            Text(url, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+          ]),
+        ),
+      ),
+    );
   }
 
   // ─── Submit ───────────────────────────────────────────────────
@@ -543,6 +566,10 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   Widget _buildFileCard(int index) {
     final f = _collectedFiles[index];
     final isRecorded = f.type == _FileType.recorded;
+    final isAudio = isRecorded || f.name.endsWith('.wav') || f.name.endsWith('.mp3') || f.name.endsWith('.m4a') || f.name.endsWith('.ogg');
+    final isVideo = f.name.endsWith('.mp4') || f.name.endsWith('.mov') || f.name.endsWith('.avi');
+    final canPlay = isAudio || isVideo;
+
     return Container(
       margin: EdgeInsets.only(bottom: 8.h),
       padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
@@ -605,6 +632,19 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
               ],
             ),
           ),
+          if (canPlay)
+            GestureDetector(
+              onTap: () => _previewFile(f.id, f.name),
+              child: Container(
+                width: 28.w, height: 28.w,
+                margin: EdgeInsets.only(right: 8.w),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Icon(Icons.play_arrow, size: 18.sp, color: AppColors.primary),
+              ),
+            ),
           GestureDetector(
             onTap: () => _removeFile(index),
             child: Container(

@@ -31,6 +31,7 @@ const menuItems = [
     children: [
       { key: '/review/claims', label: '申请审批' },
       { key: '/review/submissions', label: '提交审核' },
+      { key: '/claims', label: '任务认领' },
     ],
   },
   {
@@ -77,7 +78,7 @@ export default function MainLayout() {
 
   const selectedKey = location.pathname;
   const openKeys = location.pathname.startsWith('/collections') || location.pathname === '/text-collections' ? ['/collections'] :
-                   location.pathname.startsWith('/review') ? ['/review'] : [];
+                   location.pathname.startsWith('/review') || location.pathname.startsWith('/claims') ? ['/review'] : [];
 
   const userMenuItems = [
     {

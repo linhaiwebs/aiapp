@@ -20,6 +20,8 @@ import '../../features/profile/pages/about_page.dart';
 import '../../features/profile/pages/account_security_page.dart';
 import '../../features/team/pages/team_list_page.dart';
 import '../../features/team/pages/team_detail_page.dart';
+import '../../features/task/pages/admin_approval_page.dart';
+import '../../features/collection/pages/submission_detail_page.dart';
 import '../../shared/widgets/main_shell.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -77,6 +79,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/settings', pageBuilder: (context, state) => _slidePage(const SettingsPage(), state)),
       GoRoute(path: '/about', pageBuilder: (context, state) => _slidePage(const AboutPage(), state)),
       GoRoute(path: '/account-security', pageBuilder: (context, state) => _slidePage(const AccountSecurityPage(), state)),
+      GoRoute(path: '/admin/approvals', pageBuilder: (context, state) => _slidePage(const AdminApprovalPage(), state)),
+      GoRoute(path: '/submission/:id', pageBuilder: (context, state) => _slidePage(SubmissionDetailPage(submissionId: state.pathParameters['id']!), state)),
     ],
   );
 });

@@ -22,25 +22,38 @@ export class TeamController {
   constructor(private teamService: TeamService) {}
 
   @Get()
-  @ApiOperation({ summary: '团队列表' })
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '我的团队列表' })
   async findAll(
+    @CurrentUser('userId') userId: string,
     @Query('page') page = 1,
     @Query('pageSize') pageSize = 20,
     @Query('keyword') keyword?: string,
   ) {
-    return this.teamService.findAll(page, pageSize, keyword);
+    return this.teamService.findAll(page, pageSize, keyword, userId);
   }
 
   @Get(':id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   @ApiOperation({ summary: '团队详情' })
-  async findOne(@Param('id') id: string) {
-    return this.teamService.findOne(id);
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.teamService.findOne(id, userId);
   }
 
   @Get(':id/members')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
   @ApiOperation({ summary: '团队成员列表' })
-  async getMembers(@Param('id') id: string) {
-    return this.teamService.getMembers(id);
+  async getMembers(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.teamService.getMembers(id, userId);
   }
 
   @Post()
@@ -102,11 +115,44 @@ export class TeamController {
   @Post('join')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: '通过口令加入团队' })
+  @ApiOperation({ summary: '通过口令加入团队（需团长审批）' })
   async joinTeam(
     @CurrentUser('userId') userId: string,
     @Body('joinCode') joinCode: string,
   ) {
     return this.teamService.joinByCode(userId, joinCode);
+  }
+
+  @Get(':id/members/pending')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '待审批成员列表（团长/超级管理员）' })
+  async getPendingMembers(@Param('id') id: string) {
+    return this.teamService.getPendingMembers(id);
+  }
+
+  @Post(':id/members/:memberId/approve')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '审批通过成员' })
+  async approveMember(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser('userId') reviewerId: string,
+  ) {
+    return this.teamService.approveMember(id, memberId, reviewerId);
+  }
+
+  @Post(':id/members/:memberId/reject')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '驳回成员申请' })
+  async rejectMember(
+    @Param('id') id: string,
+    @Param('memberId') memberId: string,
+    @CurrentUser('userId') reviewerId: string,
+    @Body('reason') reason?: string,
+  ) {
+    return this.teamService.rejectMember(id, memberId, reviewerId, reason);
   }
 }

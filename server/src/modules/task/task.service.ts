@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, In } from 'typeorm';
-import { Task, TaskClaim, TaskStatus, ClaimStatus, User, UserStatus, TeamMember, Project } from '../../entities';
+import { Task, TaskClaim, TaskStatus, ClaimStatus, User, UserStatus, TeamMember, MemberStatus, Project } from '../../entities';
 import { CreateTaskDto, UpdateTaskDto, TaskFilterDto } from './dto';
 
 @Injectable()
@@ -60,7 +60,7 @@ export class TaskService {
     }
   }
 
-  async findAll(filter: TaskFilterDto) {
+  async findAll(filter: TaskFilterDto, userId?: string) {
     const {
       type, status, difficulty, minPrice, maxPrice,
       region, language, categoryId, projectId, keyword,
@@ -71,6 +71,21 @@ export class TaskService {
       .createQueryBuilder('task')
       .leftJoinAndSelect('task.category', 'category')
       .leftJoinAndSelect('task.project', 'project');
+
+    // 团队隔离：用户只能看到自己所属团队的任务
+    if (userId) {
+      const memberships = await this.teamMemberRepository.find({
+        where: { userId, status: MemberStatus.APPROVED },
+        select: ['teamId'],
+      });
+      const teamIds = memberships.map((m) => m.teamId);
+      if (teamIds.length === 0) {
+        // 无团队的用戶看不到任何任务
+        queryBuilder.andWhere('1 = 0');
+      } else {
+        queryBuilder.andWhere('task.teamId IN (:...teamIds)', { teamIds });
+      }
+    }
 
     if (type) queryBuilder.andWhere('task.type = :type', { type });
     if (status) {
@@ -300,16 +315,90 @@ export class TaskService {
     });
   }
 
-  async search(keyword: string, page = 1, pageSize = 20) {
-    return this.taskRepository.findAndCount({
-      where: [
-        { title: Like(`%${keyword}%`), status: TaskStatus.PUBLISHED },
-        { id: keyword, status: TaskStatus.PUBLISHED },
-      ],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      order: { createdAt: 'DESC' },
-    });
+  async search(keyword: string, page = 1, pageSize = 20, userId?: string) {
+    const queryBuilder = this.taskRepository
+      .createQueryBuilder('task')
+      .where(
+        '(task.title LIKE :keyword OR task.id = :id) AND task.status = :status',
+        { keyword: `%${keyword}%`, id: keyword, status: TaskStatus.PUBLISHED },
+      );
+
+    if (userId) {
+      const memberships = await this.teamMemberRepository.find({
+        where: { userId, status: MemberStatus.APPROVED },
+        select: ['teamId'],
+      });
+      const teamIds = memberships.map((m) => m.teamId);
+      if (teamIds.length === 0) {
+        queryBuilder.andWhere('1 = 0');
+      } else {
+        queryBuilder.andWhere('task.teamId IN (:...teamIds)', { teamIds });
+      }
+    }
+
+    queryBuilder
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .orderBy('task.createdAt', 'DESC');
+
+    return queryBuilder.getManyAndCount();
+  }
+
+  /** 已批准的认领记录（广场 Feed） */
+  async getApprovedClaims(page = 1, pageSize = 20, teamId?: string) {
+    const queryBuilder = this.claimRepository
+      .createQueryBuilder('claim')
+      .leftJoinAndSelect('claim.task', 'task')
+      .leftJoinAndSelect('claim.user', 'user')
+      .leftJoinAndSelect('task.team', 'team')
+      .where('claim.status IN (:...statuses)', {
+        statuses: [ClaimStatus.CLAIMED, ClaimStatus.IN_PROGRESS, ClaimStatus.SUBMITTED, ClaimStatus.COMPLETED],
+      });
+
+    if (teamId) {
+      queryBuilder.andWhere('task.teamId = :teamId', { teamId });
+    }
+
+    queryBuilder
+      .orderBy('claim.claimedAt', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+
+    const [items, total] = await queryBuilder.getManyAndCount();
+    return { items, total, page, pageSize };
+  }
+
+  /** 管理后台全量认领查询 */
+  async getAllClaims(
+    page = 1, pageSize = 20,
+    filters?: { status?: string; teamId?: string; userId?: string; taskId?: string },
+  ) {
+    const queryBuilder = this.claimRepository
+      .createQueryBuilder('claim')
+      .leftJoinAndSelect('claim.task', 'task')
+      .leftJoinAndSelect('claim.user', 'user')
+      .leftJoinAndSelect('task.team', 'team');
+
+    if (filters?.status) {
+      queryBuilder.andWhere('claim.status = :status', { status: filters.status });
+    }
+    if (filters?.teamId) {
+      queryBuilder.andWhere('task.teamId = :teamId', { teamId: filters.teamId });
+    }
+    if (filters?.userId) {
+      queryBuilder.andWhere('claim.userId = :userId', { userId: filters.userId });
+    }
+    if (filters?.taskId) {
+      queryBuilder.andWhere('claim.taskId = :taskId', { taskId: filters.taskId });
+    }
+
+    queryBuilder
+      .orderBy('claim.createdAt', 'DESC')
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+
+    const [items, total] = await queryBuilder.getManyAndCount();
+    return { items, total, page, pageSize };
   }
 
   /** 清除所有任务数据（包括claims和submissions） */

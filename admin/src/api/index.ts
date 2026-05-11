@@ -42,6 +42,8 @@ export const taskApi = {
   update: (id: string, data: any) => api.patch(`/tasks/${id}`, data),
   remove: (id: string) => api.delete(`/tasks/${id}`),
   pendingClaims: (params?: any) => api.get('/tasks/claims/pending', { params }),
+  allClaims: (params?: any) => api.get('/tasks/claims/all', { params }),
+  approvedClaims: (params?: any) => api.get('/tasks/claims/approved', { params }),
   approveClaim: (claimId: string) => api.post(`/tasks/claims/${claimId}/approve`),
   rejectClaim: (claimId: string, reason?: string) => api.post(`/tasks/claims/${claimId}/reject`, { reason }),
   clearAllData: () => api.delete('/tasks/data/all'),
@@ -86,6 +88,12 @@ export const teamApi = {
     api.post(`/teams/${id}/invite`, data),
   joinByCode: (joinCode: string) =>
     api.post('/teams/join', { joinCode }),
+  pendingMembers: (teamId: string) =>
+    api.get(`/teams/${teamId}/members/pending`),
+  approveMember: (teamId: string, memberId: string) =>
+    api.post(`/teams/${teamId}/members/${memberId}/approve`),
+  rejectMember: (teamId: string, memberId: string, reason?: string) =>
+    api.post(`/teams/${teamId}/members/${memberId}/reject`, { reason }),
 };
 
 export const textCollectionApi = {

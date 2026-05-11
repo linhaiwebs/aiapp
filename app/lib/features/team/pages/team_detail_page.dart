@@ -18,16 +18,26 @@ class TeamDetailPage extends ConsumerStatefulWidget {
   ConsumerState<TeamDetailPage> createState() => _TeamDetailPageState();
 }
 
-class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
+class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
+    with SingleTickerProviderStateMixin {
   TeamModel? _team;
   List<TeamMemberModel> _members = [];
+  List<TeamMemberModel> _pendingMembers = [];
   UserModel? _currentUser;
   bool _isLoading = true;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -37,11 +47,18 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
         ref.read(teamServiceProvider).getMembers(widget.teamId),
         ref.read(authServiceProvider).getMe(),
       ]);
+      List<TeamMemberModel> pending = [];
+      if (_isLeader || _isSuperAdmin) {
+        try {
+          pending = await ref.read(teamServiceProvider).getPendingMembers(widget.teamId);
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _team = results[0] as TeamModel;
           _members = results[1] as List<TeamMemberModel>;
           _currentUser = results[2] as UserModel;
+          _pendingMembers = pending;
           _isLoading = false;
         });
       }
@@ -52,16 +69,18 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
 
   bool get _isLeader => _currentUser != null && _team != null &&
       _members.any((m) => m.userId == _currentUser!.id && m.role == 'leader');
-
+  bool get _isSuperAdmin => _currentUser?.role == UserRole.superAdmin;
+  bool get _canManage => _isLeader || _isSuperAdmin;
   bool get _isMember => _currentUser != null &&
-      _members.any((m) => m.userId == _currentUser!.id);
+      _members.any((m) => m.userId == _currentUser!.id && m.isApproved);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: Text(_team?.name ?? '团队详情', style: TextStyle(fontSize: 17.sp, fontWeight: FontWeight.w600)),
+        title: Text(_team?.name ?? '团队详情',
+            style: TextStyle(fontSize: 17.sp, fontWeight: FontWeight.w600)),
         backgroundColor: AppColors.background,
         actions: [
           if (_isLeader)
@@ -70,32 +89,205 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
               icon: Icon(Icons.edit_outlined, size: 20.sp),
             ),
         ],
+        bottom: _canManage
+            ? TabBar(
+                controller: _tabController,
+                labelColor: AppColors.primary,
+                unselectedLabelColor: AppColors.outline,
+                indicatorColor: AppColors.primary,
+                labelStyle: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
+                tabs: [
+                  Tab(text: '成员 (${_members.where((m) => m.isApproved).length})'),
+                  Tab(text: '待审批 (${_pendingMembers.length})'),
+                ],
+              )
+            : null,
       ),
       body: _isLoading
-          ? const Center(child: Padding(padding: EdgeInsets.all(16), child: SkeletonTeamList(count: 6)))
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: ListView(
-                padding: EdgeInsets.all(AppSpacing.md.w),
-                children: [
-                  _buildTeamInfoCard(),
-                  SizedBox(height: AppSpacing.lg.h),
-                  _buildActionButtons(),
-                  SizedBox(height: AppSpacing.lg.h),
-                  _buildSectionHeader('团队成员 (${_members.length})', onAdd: _isLeader ? _showAddMemberSheet : null),
-                  SizedBox(height: AppSpacing.sm.h),
-                  if (_members.isEmpty)
-                    _buildEmptyMembers()
-                  else
-                    ..._members.map(_buildMemberTile),
-                  SizedBox(height: 100.h),
-                ],
-              ),
-            ),
+          ? const Center(
+              child: Padding(
+                  padding: EdgeInsets.all(16), child: SkeletonTeamList(count: 6)))
+          : _canManage
+              ? TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildMemberList(),
+                    _buildPendingList(),
+                  ],
+                )
+              : _buildMemberList(),
     );
   }
 
+  Widget _buildMemberList() {
+    final approved = _members.where((m) => m.isApproved).toList();
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView(
+        padding: EdgeInsets.all(AppSpacing.md.w),
+        children: [
+          _buildTeamInfoCard(),
+          SizedBox(height: AppSpacing.lg.h),
+          _buildActionButtons(),
+          SizedBox(height: AppSpacing.lg.h),
+          _buildSectionHeader('团队成员 (${approved.length})',
+              onAdd: _isLeader ? _showAddMemberSheet : null),
+          SizedBox(height: AppSpacing.sm.h),
+          if (approved.isEmpty)
+            _buildEmptyMembers()
+          else
+            ...approved.map(_buildMemberTile),
+          SizedBox(height: 100.h),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingList() {
+    if (_pendingMembers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_outline, size: 48.sp, color: AppColors.outline),
+            SizedBox(height: AppSpacing.sm.h),
+            Text('暂无待审批成员',
+                style: TextStyle(fontSize: 14.sp, color: AppColors.outline)),
+          ],
+        ),
+      );
+    }
+    return ListView(
+      padding: EdgeInsets.all(AppSpacing.md.w),
+      children: [
+        ..._pendingMembers.map(_buildPendingTile),
+        SizedBox(height: 100.h),
+      ],
+    );
+  }
+
+  Widget _buildPendingTile(TeamMemberModel member) {
+    return Container(
+      margin: EdgeInsets.only(bottom: AppSpacing.sm.h),
+      padding: EdgeInsets.all(AppSpacing.md.w),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Row(children: [
+        Container(
+          width: 40.w, height: 40.w,
+          decoration: BoxDecoration(
+            color: AppColors.orange.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(AppRadius.md),
+          ),
+          child: Center(
+            child: Text(member.displayLabel.substring(0, 1).toUpperCase(),
+                style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700, color: AppColors.orange)),
+          ),
+        ),
+        SizedBox(width: AppSpacing.sm.w),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(member.displayLabel,
+                style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w500, color: AppColors.onSurface)),
+            SizedBox(height: 2.h),
+            Text('申请加入于 ${_formatDate(member.createdAt)}',
+                style: TextStyle(fontSize: 12.sp, color: AppColors.outline)),
+          ]),
+        ),
+        SizedBox(
+          height: 32.h,
+          child: TextButton(
+            onPressed: () => _approveMember(member),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: 12.w),
+              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+            ),
+            child: Text('通过', style: TextStyle(fontSize: 12.sp, color: AppColors.primary)),
+          ),
+        ),
+        SizedBox(width: AppSpacing.sm.w),
+        SizedBox(
+          height: 32.h,
+          child: TextButton(
+            onPressed: () => _rejectMember(member),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.symmetric(horizontal: 12.w),
+              backgroundColor: AppColors.error.withValues(alpha: 0.1),
+            ),
+            child: Text('驳回', style: TextStyle(fontSize: 12.sp, color: AppColors.error)),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Future<void> _approveMember(TeamMemberModel member) async {
+    try {
+      await ref.read(teamServiceProvider).approveMember(widget.teamId, member.id);
+      _loadData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已通过 ${member.displayLabel} 的申请'), backgroundColor: AppColors.secondary),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
+  Future<void> _rejectMember(TeamMemberModel member) async {
+    final reasonController = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('驳回申请'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('确定驳回 ${member.displayLabel} 的申请吗？'),
+          SizedBox(height: AppSpacing.sm.h),
+          TextField(
+            controller: reasonController,
+            decoration: const InputDecoration(
+              labelText: '驳回原因（可选）',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 2,
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => ctx.pop(), child: const Text('取消')),
+          TextButton(
+            onPressed: () => ctx.pop(reasonController.text),
+            child: const Text('驳回', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    try {
+      await ref.read(teamServiceProvider).rejectMember(
+        widget.teamId, member.id,
+        reason: result.isEmpty ? null : result,
+      );
+      _loadData();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('操作失败: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
   Widget _buildTeamInfoCard() {
+    // joinCode is already stripped by backend for non-leaders
+    final hasJoinCode = _isLeader && _team?.joinCode != null && _team!.joinCode.isNotEmpty;
     return Container(
       padding: EdgeInsets.all(20.w),
       decoration: BoxDecoration(
@@ -106,42 +298,50 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
         ),
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            Container(
-              width: 48.w, height: 48.w,
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(AppRadius.md)),
-              child: Icon(Icons.group, size: 24.sp, color: Colors.white),
-            ),
-            SizedBox(width: AppSpacing.sm.w),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_team?.name ?? '', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: Colors.white)),
-                if (_team?.description != null && _team!.description!.isNotEmpty)
-                  Padding(
-                    padding: EdgeInsets.only(top: 2.h),
-                    child: Text(_team!.description!, style: TextStyle(fontSize: 13.sp, color: Colors.white.withValues(alpha: 0.8))),
-                  ),
-              ],
-            )),
-          ]),
-          SizedBox(height: AppSpacing.md.h),
-          Row(children: [
-            Icon(Icons.people_outline, size: 16.sp, color: Colors.white.withValues(alpha: 0.8)),
-            SizedBox(width: AppSpacing.xs.w),
-            Text('${_members.length} 人', style: TextStyle(fontSize: 14.sp, color: Colors.white, fontWeight: FontWeight.w500)),
-          ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 48.w, height: 48.w,
+            decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(AppRadius.md)),
+            child: Icon(Icons.group, size: 24.sp, color: Colors.white),
+          ),
+          SizedBox(width: AppSpacing.sm.w),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(_team?.name ?? '',
+                  style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: Colors.white)),
+              if (_team?.description != null && _team!.description!.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.only(top: 2.h),
+                  child: Text(_team!.description!,
+                      style: TextStyle(fontSize: 13.sp, color: Colors.white.withValues(alpha: 0.8))),
+                ),
+            ]),
+          ),
+        ]),
+        SizedBox(height: AppSpacing.md.h),
+        Row(children: [
+          Icon(Icons.people_outline, size: 16.sp, color: Colors.white.withValues(alpha: 0.8)),
+          SizedBox(width: AppSpacing.xs.w),
+          Text('${_members.where((m) => m.isApproved).length} 人',
+              style: TextStyle(fontSize: 14.sp, color: Colors.white, fontWeight: FontWeight.w500)),
+        ]),
+        if (hasJoinCode) ...[
           SizedBox(height: AppSpacing.sm.h),
           Container(
             padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(AppRadius.md)),
+            decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppRadius.md)),
             child: Row(children: [
               Icon(Icons.vpn_key_outlined, size: 16.sp, color: Colors.white.withValues(alpha: 0.8)),
               SizedBox(width: AppSpacing.sm.w),
-              Expanded(child: Text('加入口令: ${_team?.joinCode ?? '-'}', style: TextStyle(fontSize: 14.sp, color: Colors.white, fontWeight: FontWeight.w500))),
+              Expanded(
+                child: Text('加入口令: ${_team?.joinCode ?? '-'}',
+                    style: TextStyle(fontSize: 14.sp, color: Colors.white, fontWeight: FontWeight.w500)),
+              ),
               GestureDetector(
                 onTap: () {
                   Clipboard.setData(ClipboardData(text: _team?.joinCode ?? ''));
@@ -154,7 +354,7 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
             ]),
           ),
         ],
-      ),
+      ]),
     );
   }
 
@@ -164,9 +364,7 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
         onPressed: _showAddMemberSheet,
         icon: Icon(Icons.person_add, size: 18.sp),
         label: Text('邀请成员', style: TextStyle(fontSize: 14.sp)),
-        style: ElevatedButton.styleFrom(
-          minimumSize: Size(double.infinity, 48.h),
-        ),
+        style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 48.h)),
       );
     }
 
@@ -183,14 +381,8 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
       );
     }
 
-    return OutlinedButton.icon(
-      onPressed: _applyToJoin,
-      icon: Icon(Icons.group_add, size: 18.sp),
-      label: Text('申请加入', style: TextStyle(fontSize: 14.sp)),
-      style: OutlinedButton.styleFrom(
-        minimumSize: Size(double.infinity, 48.h),
-      ),
-    );
+    // Non-members: no more direct join from detail page (use join-by-code from team list)
+    return const SizedBox.shrink();
   }
 
   Widget _buildSectionHeader(String title, {VoidCallback? onAdd}) {
@@ -230,7 +422,7 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
   Widget _buildMemberTile(TeamMemberModel member) {
     final isMe = member.userId == _currentUser?.id;
     final isLeader = member.role == 'leader';
-    final joinDate = '${member.createdAt.year}-${member.createdAt.month.toString().padLeft(2, '0')}-${member.createdAt.day.toString().padLeft(2, '0')}';
+    final joinDate = _formatDate(member.createdAt);
 
     return Container(
       margin: EdgeInsets.only(bottom: AppSpacing.sm.h),
@@ -238,7 +430,10 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: isMe ? AppColors.primary.withValues(alpha: 0.2) : AppColors.outlineVariant.withValues(alpha: 0.4)),
+        border: Border.all(
+            color: isMe
+                ? AppColors.primary.withValues(alpha: 0.2)
+                : AppColors.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Row(children: [
         Container(
@@ -253,22 +448,25 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
           ),
           child: Center(
             child: Text(member.displayLabel.substring(0, 1).toUpperCase(),
-              style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700, color: Colors.white)),
+                style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700, color: Colors.white)),
           ),
         ),
         SizedBox(width: AppSpacing.sm.w),
-        Expanded(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Flexible(
-                child: Text(member.displayLabel, style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w500, color: AppColors.onSurface), overflow: TextOverflow.ellipsis),
+                child: Text(member.displayLabel,
+                    style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w500, color: AppColors.onSurface),
+                    overflow: TextOverflow.ellipsis),
               ),
               if (isMe) ...[
                 SizedBox(width: AppSpacing.xs.w),
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: AppSpacing.xs.w, vertical: 2.h),
-                  decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(AppRadius.sm)),
+                  decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.sm)),
                   child: Text('我', style: TextStyle(fontSize: 10.sp, color: AppColors.primary)),
                 ),
               ],
@@ -279,8 +477,8 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
               SizedBox(width: AppSpacing.sm.w),
               Text(joinDate, style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant)),
             ]),
-          ],
-        )),
+          ]),
+        ),
         if (_isLeader && !isMe)
           PopupMenuButton<String>(
             onSelected: (action) {
@@ -306,8 +504,13 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
           width: 1,
         ),
       ),
-      child: Text(label, style: TextStyle(fontSize: 11.sp, color: isLeader ? AppColors.orange : AppColors.onSurfaceVariant)),
+      child: Text(label,
+          style: TextStyle(fontSize: 11.sp, color: isLeader ? AppColors.orange : AppColors.onSurfaceVariant)),
     );
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
   void _confirmRemoveMember(TeamMemberModel member) {
@@ -326,7 +529,8 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
                 _loadData();
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败: $e'), backgroundColor: AppColors.error));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('操作失败: $e'), backgroundColor: AppColors.error));
                 }
               }
             },
@@ -348,60 +552,32 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
           TextButton(
             onPressed: () async {
               ctx.pop();
-              await _leaveTeam();
+              final memberId = _members
+                  .cast<TeamMemberModel?>()
+                  .firstWhere((m) => m!.userId == _currentUser!.id && m.isApproved,
+                      orElse: () => null)
+                  ?.id;
+              if (memberId == null) return;
+              try {
+                await ref.read(teamServiceProvider).removeMember(widget.teamId, memberId);
+                _loadData();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已退出团队'), backgroundColor: AppColors.secondary),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('退出失败: $e'), backgroundColor: AppColors.error));
+                }
+              }
             },
             child: const Text('退出', style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
     );
-  }
-
-  Future<void> _leaveTeam() async {
-    final memberId = _members.cast<TeamMemberModel?>().firstWhere(
-      (m) => m!.userId == _currentUser!.id,
-      orElse: () => null,
-    )?.id;
-    if (memberId == null) return;
-    try {
-      await ref.read(teamServiceProvider).removeMember(widget.teamId, memberId);
-      _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已退出团队'), backgroundColor: AppColors.secondary),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('退出失败: $e'), backgroundColor: AppColors.error),
-        );
-      }
-    }
-  }
-
-  Future<void> _applyToJoin() async {
-    if (_team?.joinCode == null || _team!.joinCode.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('该团队暂无加入口令'), backgroundColor: AppColors.error),
-      );
-      return;
-    }
-    try {
-      await ref.read(teamServiceProvider).joinByCode(_team!.joinCode);
-      _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('加入团队成功！'), backgroundColor: AppColors.secondary),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加入失败: $e'), backgroundColor: AppColors.error),
-        );
-      }
-    }
   }
 
   void _showEditTeamDialog() {
@@ -413,22 +589,22 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
       backgroundColor: AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20.r))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(AppSpacing.lg.w, 20.h, AppSpacing.lg.w, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl.h),
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg.w, 20.h, AppSpacing.lg.w,
+            MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl.h),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(width: 36.w, height: 4.h, decoration: BoxDecoration(color: AppColors.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2.r)))),
+          Center(
+              child: Container(
+                  width: 36.w, height: 4.h,
+                  decoration: BoxDecoration(
+                      color: AppColors.outline.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2.r)))),
           SizedBox(height: 20.h),
-          Text('编辑团队', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+          Text('编辑团队',
+              style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
           SizedBox(height: AppSpacing.md.h),
-          TextField(
-            controller: nameController,
-            decoration: const InputDecoration(labelText: '团队名称'),
-          ),
+          TextField(controller: nameController, decoration: const InputDecoration(labelText: '团队名称')),
           SizedBox(height: AppSpacing.sm.h),
-          TextField(
-            controller: descController,
-            decoration: const InputDecoration(labelText: '团队描述'),
-            maxLines: 2,
-          ),
+          TextField(controller: descController, decoration: const InputDecoration(labelText: '团队描述'), maxLines: 2),
           SizedBox(height: 20.h),
           SizedBox(
             width: double.infinity,
@@ -439,13 +615,12 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
                     'name': nameController.text,
                     'description': descController.text,
                   });
-                  if (ctx.mounted) {
-                    ctx.pop();
-                  }
+                  if (ctx.mounted) ctx.pop();
                   _loadData();
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('更新失败: $e'), backgroundColor: AppColors.error));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('更新失败: $e'), backgroundColor: AppColors.error));
                   }
                 }
               },
@@ -466,11 +641,18 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
       backgroundColor: AppColors.surfaceContainerLowest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20.r))),
       builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(AppSpacing.lg.w, 20.h, AppSpacing.lg.w, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl.h),
+        padding: EdgeInsets.fromLTRB(AppSpacing.lg.w, 20.h, AppSpacing.lg.w,
+            MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl.h),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Center(child: Container(width: 36.w, height: 4.h, decoration: BoxDecoration(color: AppColors.outline.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2.r)))),
+          Center(
+              child: Container(
+                  width: 36.w, height: 4.h,
+                  decoration: BoxDecoration(
+                      color: AppColors.outline.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2.r)))),
           SizedBox(height: 20.h),
-          Text('邀请成员', style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+          Text('邀请成员',
+              style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
           SizedBox(height: AppSpacing.md.h),
           TextField(
             controller: phoneController,
@@ -493,16 +675,16 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
                     'contact': phoneController.text.trim(),
                     'userName': nameController.text.trim(),
                   });
-                  if (ctx.mounted) {
-                    ctx.pop();
-                  }
+                  if (ctx.mounted) ctx.pop();
                   _loadData();
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('邀请已发送'), backgroundColor: AppColors.secondary));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('邀请已发送'), backgroundColor: AppColors.secondary));
                   }
                 } catch (e) {
                   if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('邀请失败: $e'), backgroundColor: AppColors.error));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('邀请失败: $e'), backgroundColor: AppColors.error));
                   }
                 }
               },

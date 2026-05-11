@@ -121,6 +121,20 @@ async function bootstrap() {
     console.log(`📱 Flutter web app served at /app/ (from ${appDistPath})`);
   }
 
+  // Serve APK download page at /dist
+  const publicDist = resolve(process.cwd(), 'public/dist');
+  if (fs.existsSync(publicDist)) {
+    app.useStaticAssets(publicDist, { prefix: '/dist/' });
+    app.use('/dist', (req: Request, res: Response, next: NextFunction) => {
+      if (req.method === 'GET' && !req.path.includes('.')) {
+        res.sendFile(resolve(publicDist, 'index.html'));
+      } else {
+        next();
+      }
+    });
+    console.log(`📦 APK download page at /dist/`);
+  }
+
   // Serve admin panel at /admin
   const adminDistPaths = [
     resolve(process.cwd(), '../admin/dist'),       // dev mode

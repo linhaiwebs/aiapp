@@ -62,6 +62,36 @@ class TaskService {
     final res = await _client.dio.post('/tasks', data: data);
     return TaskModel.fromJson(res.data);
   }
+
+  Future<Map<String, dynamic>> getApprovedClaims({int page = 1, int pageSize = 20, String? teamId}) async {
+    final res = await _client.dio.get('/tasks/claims/approved', queryParameters: {
+      'page': page,
+      'pageSize': pageSize,
+      if (teamId != null) 'teamId': teamId,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getPendingClaims({String? taskId, int page = 1, int pageSize = 20}) async {
+    final res = await _client.dio.get('/tasks/claims/pending', queryParameters: {
+      'page': page,
+      'pageSize': pageSize,
+      if (taskId != null) 'taskId': taskId,
+    });
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> approveClaim(String claimId) async {
+    final res = await _client.dio.post('/tasks/claims/$claimId/approve');
+    return res.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> rejectClaim(String claimId, {String? reason}) async {
+    final res = await _client.dio.post('/tasks/claims/$claimId/reject', data: {
+      if (reason != null) 'reason': reason,
+    });
+    return res.data as Map<String, dynamic>;
+  }
 }
 
 final taskServiceProvider = Provider<TaskService>((ref) {

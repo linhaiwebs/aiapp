@@ -28,9 +28,15 @@ export class TaskController {
   constructor(private taskService: TaskService) {}
 
   @Get('search')
-  @ApiOperation({ summary: '搜索任务' })
-  async search(@Query('keyword') keyword: string, @Query('page') page = 1) {
-    const [items, total] = await this.taskService.search(keyword, page);
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '搜索任务（团队隔离）' })
+  async search(
+    @CurrentUser('userId') userId: string,
+    @Query('keyword') keyword: string,
+    @Query('page') page: number = 1,
+  ) {
+    const [items, total] = await this.taskService.search(keyword, Number(page), 20, userId);
     return { items, total };
   }
 
@@ -58,10 +64,43 @@ export class TaskController {
     return this.taskService.getPendingClaims(taskId, page, pageSize);
   }
 
+  @Get('claims/approved')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '已批准认领记录（广场 Feed）' })
+  async getApprovedClaims(
+    @Query('page') page = 1,
+    @Query('pageSize') pageSize = 20,
+    @Query('teamId') teamId?: string,
+  ) {
+    return this.taskService.getApprovedClaims(page, pageSize, teamId);
+  }
+
+  @Get('claims/all')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '管理后台全量认领查询' })
+  async getAllClaims(
+    @Query('page') page = 1,
+    @Query('pageSize') pageSize = 20,
+    @Query('status') status?: string,
+    @Query('teamId') teamId?: string,
+    @Query('userId') userId?: string,
+    @Query('taskId') taskId?: string,
+  ) {
+    return this.taskService.getAllClaims(page, pageSize, { status, teamId, userId, taskId });
+  }
+
   @Get()
-  @ApiOperation({ summary: '任务列表' })
-  async findAll(@Query() filter: TaskFilterDto) {
-    return this.taskService.findAll(filter);
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '任务列表（团队隔离）' })
+  async findAll(
+    @Query() filter: TaskFilterDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.taskService.findAll(filter, userId);
   }
 
   @Get(':id')

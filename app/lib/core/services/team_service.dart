@@ -65,6 +65,24 @@ class TeamService {
     final list = res.data['items'] ?? res.data as List;
     return (list as List).map((e) => TeamModel.fromJson(e as Map<String, dynamic>)).toList();
   }
+
+  Future<List<TeamMemberModel>> getPendingMembers(String teamId) async {
+    final res = await _client.dio.get('/teams/$teamId/members/pending');
+    final list = res.data is List ? res.data : res.data['items'] ?? [];
+    return (list as List).map((e) => TeamMemberModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<TeamMemberModel> approveMember(String teamId, String memberId) async {
+    final res = await _client.dio.post('/teams/$teamId/members/$memberId/approve');
+    return TeamMemberModel.fromJson(res.data);
+  }
+
+  Future<TeamMemberModel> rejectMember(String teamId, String memberId, {String? reason}) async {
+    final res = await _client.dio.post('/teams/$teamId/members/$memberId/reject', data: {
+      if (reason != null) 'reason': reason,
+    });
+    return TeamMemberModel.fromJson(res.data);
+  }
 }
 
 final teamServiceProvider = Provider<TeamService>((ref) {

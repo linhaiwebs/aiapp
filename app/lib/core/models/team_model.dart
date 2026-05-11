@@ -48,6 +48,8 @@ class TeamMemberModel {
   final String? phone;
   final String? email;
   final String role;
+  final String status;
+  final String? rejectReason;
   final DateTime createdAt;
 
   const TeamMemberModel({
@@ -58,6 +60,8 @@ class TeamMemberModel {
     this.phone,
     this.email,
     this.role = 'member',
+    this.status = 'approved',
+    this.rejectReason,
     required this.createdAt,
   });
 
@@ -69,9 +73,19 @@ class TeamMemberModel {
         phone: json['phone'] as String?,
         email: json['email'] as String?,
         role: json['role'] as String? ?? 'member',
+        status: json['status'] as String? ?? 'approved',
+        rejectReason: json['rejectReason'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
       );
 
   String get displayLabel => userName ?? phone ?? email ?? userId.substring(0, 8);
   String get roleLabel => role == 'leader' ? '负责人' : '成员';
+  String get statusLabel => switch (status) {
+    'pending' => '待审批',
+    'approved' => '已通过',
+    'rejected' => '已驳回',
+    _ => status,
+  };
+  bool get isPending => status == 'pending';
+  bool get isApproved => status == 'approved';
 }

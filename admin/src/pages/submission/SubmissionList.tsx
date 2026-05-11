@@ -172,6 +172,12 @@ export default function SubmissionList() {
       render: (_: any, r: any) => r.user?.nickname || r.user?.phone?.slice(-4) || '-',
     },
     {
+      title: '归属团队',
+      key: 'team',
+      width: 120,
+      render: (_: any, r: any) => r.task?.team?.name ?? '-',
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',

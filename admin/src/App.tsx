@@ -11,6 +11,7 @@ import SubmissionList from './pages/submission/SubmissionList';
 import CategoryList from './pages/category/CategoryList';
 import TeamList from './pages/team/TeamList';
 import ClaimApprovals from './pages/task/ClaimApprovals';
+import ClaimedTasks from './pages/task/ClaimedTasks';
 import CollectionDataList from './pages/collection/CollectionDataList';
 import DataExport from './pages/export/DataExport';
 import ProjectList from './pages/project/ProjectList';
@@ -62,6 +63,7 @@ function App() {
         <Route path="tasks/:id/edit" element={<TaskForm />} />
         <Route path="review/claims" element={<ClaimApprovals />} />
         <Route path="review/submissions" element={<SubmissionList />} />
+        <Route path="claims" element={<ClaimedTasks />} />
         <Route path="collections/:type" element={<CollectionDataList />} />
 
         <Route path="projects" element={<ProjectList />} />

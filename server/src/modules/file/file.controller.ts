@@ -8,10 +8,15 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  Req,
+  Res,
+  Headers,
+  HttpStatus,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { Request, Response } from 'express';
 import { FileService } from './file.service';
 import { InitUploadDto, CompleteUploadDto } from './dto';
 import { CurrentUser } from '../../common/decorators';
@@ -82,6 +87,47 @@ export class FileController {
     const fileEntity = await this.fileService.initUpload(userId, initDto);
     await this.fileService.uploadChunk(fileEntity.id, 0, file.buffer);
     return this.fileService.completeUpload({ fileId: fileEntity.id });
+  }
+
+  @Get(':id/stream')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '流式播放文件（支持 Range 请求）' })
+  async streamFile(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @Headers('range') rangeHeader?: string,
+  ) {
+    let range: { start: number; end: number } | undefined;
+
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : Infinity;
+      range = { start, end: end === Infinity ? undefined! : end };
+    }
+
+    const { stream, mimeType, fileSize, fileName } = await this.fileService.getFileStream(id, range);
+
+    res.set({
+      'Content-Type': mimeType,
+      'Accept-Ranges': 'bytes',
+      'Content-Disposition': `inline; filename="${encodeURIComponent(fileName)}"`,
+    });
+
+    if (rangeHeader && range) {
+      const end = range.end ?? fileSize - 1;
+      const chunkSize = end - range.start + 1;
+      res.status(HttpStatus.PARTIAL_CONTENT);
+      res.set({
+        'Content-Range': `bytes ${range.start}-${end}/${fileSize}`,
+        'Content-Length': chunkSize,
+      });
+    } else {
+      res.set({ 'Content-Length': fileSize });
+    }
+
+    stream.pipe(res);
   }
 
   @Get(':id')

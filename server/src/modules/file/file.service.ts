@@ -192,6 +192,53 @@ export class FileService {
     return `/storage/${file.storedName}`;
   }
 
+  /** 获取文件流（支持 Range 请求） */
+  async getFileStream(
+    id: string,
+    range?: { start: number; end: number },
+  ): Promise<{
+    stream: fs.ReadStream;
+    mimeType: string;
+    fileSize: number;
+    fileName: string;
+  }> {
+    const file = await this.findOne(id);
+
+    if (this.storageType === 'minio') {
+      try {
+        const buffer = await this.minioClient.getObject(this.bucket, file.storedName);
+        // Write to temp file for streaming
+        const tmpDir = path.join(this.localPath, '.tmp');
+        if (!fs.existsSync(tmpDir)) {
+          fs.mkdirSync(tmpDir, { recursive: true });
+        }
+        const tmpPath = path.join(tmpDir, file.storedName);
+        fs.writeFileSync(tmpPath, buffer);
+        return {
+          stream: fs.createReadStream(tmpPath, range ? { start: range.start, end: range.end } : undefined),
+          mimeType: file.mimeType || 'application/octet-stream',
+          fileSize: buffer.length,
+          fileName: file.originalName,
+        };
+      } catch {
+        throw new NotFoundException('文件获取失败');
+      }
+    }
+
+    const filePath = path.join(this.localPath, file.storedName);
+    if (!fs.existsSync(filePath)) {
+      throw new NotFoundException('文件不存在');
+    }
+
+    const stat = fs.statSync(filePath);
+    return {
+      stream: fs.createReadStream(filePath, range ? { start: range.start, end: range.end } : undefined),
+      mimeType: file.mimeType || 'application/octet-stream',
+      fileSize: stat.size,
+      fileName: file.originalName,
+    };
+  }
+
   async remove(id: string, userId: string): Promise<void> {
     const file = await this.findOne(id);
     if (file.userId !== userId) {

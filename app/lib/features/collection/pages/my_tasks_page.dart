@@ -21,7 +21,7 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
     _loadClaims();
   }
 
@@ -63,8 +63,8 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
-    final tabs = ['待采集', '采集中', '待审核', '已通过', '已驳回'];
-    final filters = [ClaimStatus.claimed, ClaimStatus.inProgress, ClaimStatus.submitted, ClaimStatus.completed, ClaimStatus.abandoned];
+    final tabs = ['待审批', '待采集', '采集中', '待审核', '已通过', '已驳回'];
+    final filters = [ClaimStatus.pendingApproval, ClaimStatus.claimed, ClaimStatus.inProgress, ClaimStatus.submitted, ClaimStatus.completed, ClaimStatus.abandoned];
 
     return Scaffold(
       backgroundColor: AppColors.background,
