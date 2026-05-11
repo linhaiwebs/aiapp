@@ -20,15 +20,15 @@ String get defaultApiBaseUrl {
     return '/api';
   }
 
-  // 原生平台：默认用 10.0.2.2（Android 模拟器）
-  // 真机请在 APP 内「设置→服务器设置」切换为实际服务器地址
-  return 'http://10.0.2.2:$kDefaultApiPort/api';
+  // 原生平台：默认连接生产环境
+  // 本地调试可用编译参数覆盖：--dart-define=API_BASE_URL=http://10.0.2.2:3000/api
+  return 'https://blackend.duanfukeji.com/api';
 }
 
 /// 编译期常量（用于 String.fromEnvironment 默认值）
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://localhost:3000/api',
+  defaultValue: 'https://blackend.duanfukeji.com/api',
 );
 
 const int maxUploadRetries = 3;
