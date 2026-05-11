@@ -21,7 +21,7 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   List<TaskClaimModel> _claims = [];
-  List<TaskModel> _availableTasks = [];
+  List<TeamModel> _myTeams = [];
   UserModel? _currentUser;
   bool _isLoading = true;
 
@@ -45,28 +45,29 @@ class _HomePageState extends ConsumerState<HomePage> {
       final user = results[2] as UserModel;
       setState(() {
         _claims = claims;
+        _myTeams = teams;
         _currentUser = user;
+        _isLoading = false;
       });
-      await _loadAvailableTasks(teams);
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadAvailableTasks(List<TeamModel> teams) async {
-    try {
-      final tasks = await ref.read(taskServiceProvider).findAll();
-      final claimedTaskIds = _claims.map((c) => c.taskId).toSet();
-      final teamIds = teams.map((t) => t.id).toSet();
-      final available = tasks.where((t) {
-        if (claimedTaskIds.contains(t.id)) return false;
-        if (t.teamId != null && !teamIds.contains(t.teamId)) return false;
-        return true;
-      }).toList();
-      if (mounted) setState(() { _availableTasks = available; _isLoading = false; });
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+  /// Whether the current user is a team leader (system-level or team-level).
+  bool get _isTeamLeader {
+    if (_currentUser == null) return false;
+    if (_currentUser!.role == UserRole.leader || _currentUser!.role == UserRole.superAdmin) return true;
+    for (final team in _myTeams) {
+      for (final member in team.members) {
+        if (member.userId == _currentUser!.id &&
+            member.role == 'leader' &&
+            member.status == 'approved') {
+          return true;
+        }
+      }
     }
+    return false;
   }
 
   List<TaskClaimModel> get _approvedClaims =>
@@ -89,8 +90,10 @@ class _HomePageState extends ConsumerState<HomePage> {
             SliverToBoxAdapter(child: _buildHeader()),
             SliverToBoxAdapter(child: _buildHeroBanner()),
             SliverToBoxAdapter(child: _buildQuickNavCards()),
-            if (_currentUser != null && (_currentUser!.role == UserRole.leader || _currentUser!.role == UserRole.superAdmin))
+            if (_isTeamLeader) ...[
               SliverToBoxAdapter(child: _buildAdminEntryCard()),
+              SliverToBoxAdapter(child: _buildTaskCreateEntryCard()),
+            ],
             if (_pendingClaims.isNotEmpty) SliverToBoxAdapter(child: _buildPendingNotice()),
             if (_isLoading)
               SliverPadding(
@@ -118,16 +121,6 @@ class _HomePageState extends ConsumerState<HomePage> {
                     childCount: _submittedClaims.length,
                   )),
                 ),
-              if (_availableTasks.isNotEmpty) ...[
-                SliverToBoxAdapter(child: _buildAvailableSectionHeader()),
-                SliverPadding(
-                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.layoutMargin.w),
-                  sliver: SliverList(delegate: SliverChildBuilderDelegate(
-                    (_, i) => _buildAvailableTaskCard(_availableTasks[i]),
-                    childCount: _availableTasks.length > 5 ? 5 : _availableTasks.length,
-                  )),
-                ),
-              ],
             ],
             SliverToBoxAdapter(child: SizedBox(height: 100.h)),
           ],
@@ -434,39 +427,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     );
   }
 
-  // ─── Available Section Header — "已发采集项" + "查看全部" chip ───
-
-  Widget _buildAvailableSectionHeader() {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, AppSpacing.md.h, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(
-          '已发采集项',
-          style: TextStyle(fontSize: 18.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface),
-        ),
-        GestureDetector(
-          onTap: () => context.push('/tasks'),
-          child: Container(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm.w, vertical: AppSpacing.xs.h),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppRadius.full),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Text(
-                '查看全部',
-                style: TextStyle(fontSize: 12.sp, color: AppColors.primary, fontWeight: FontWeight.w600),
-              ),
-              SizedBox(width: 2.w),
-              Icon(Icons.arrow_forward_ios, size: 10.sp, color: AppColors.primary),
-            ]),
-          ),
-        ),
-      ]),
-    );
-  }
-
   // ────────────────────────────────────────────────────────────
   //  Task Claim Card — approved / submitted
   //  Card bg #20201f, #58423a border, rounded-28, neomorph shadow
@@ -628,190 +588,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     ClaimStatus.rejected => '已驳回',
   };
 
-  // ────────────────────────────────────────────────────────────
-  //  Available Task Card — Stitch spec full layout
-  //  Card bg #20201f, #58423a border, rounded-28, neomorph shadow
-  //  Type chip, title, ID, price, deadline, progress bar, button
-  // ────────────────────────────────────────────────────────────
-
-  Widget _buildAvailableTaskCard(TaskModel task) {
-    final typeConfig = _typeVisual(task.type);
-    final remaining = task.totalQuantity - task.claimedQuantity;
-    final progress = task.totalQuantity > 0
-        ? (task.claimedQuantity / task.totalQuantity).clamp(0.0, 1.0)
-        : 0.0;
-
-    return Container(
-      margin: EdgeInsets.only(bottom: AppSpacing.dataGutter.h),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: BorderRadius.circular(AppRadius.card.r),
-        border: Border.all(color: AppColors.outlineVariant, width: 1),
-        boxShadow: AppShadows.card,
-      ),
-      child: Stack(
-        children: [
-          // Decorative corner circle
-          Positioned(
-            top: -16.h,
-            right: -16.w,
-            child: Container(
-              width: 64.w,
-              height: 64.w,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: typeConfig.color.withValues(alpha: 0.06),
-              ),
-            ),
-          ),
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.card.r),
-            child: InkWell(
-              onTap: () => context.push('/tasks/${task.id}'),
-              borderRadius: BorderRadius.circular(AppRadius.card.r),
-              child: Padding(
-                padding: EdgeInsets.all(AppSpacing.cardPadding.w),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── Top row: type chip + price ──
-                    Row(children: [
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm.w, vertical: 2.h),
-                        decoration: BoxDecoration(
-                          color: typeConfig.color.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(AppRadius.sm.r),
-                          border: Border.all(
-                            color: typeConfig.color.withValues(alpha: 0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(typeConfig.icon, size: 12.sp, color: typeConfig.color),
-                          SizedBox(width: 4.w),
-                          Text(
-                            task.typeLabel,
-                            style: TextStyle(
-                              fontSize: 11.sp,
-                              color: typeConfig.color,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ]),
-                      ),
-                      const Spacer(),
-                      if (task.unitPrice > 0)
-                        Text(
-                          task.priceLabel,
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            color: AppColors.secondary,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                    ]),
-                    SizedBox(height: AppSpacing.sm.h),
-                    // ── Title ──
-                    Text(
-                      task.title,
-                      style: TextStyle(
-                        fontSize: 15.sp,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.onSurface,
-                        height: 1.3,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    SizedBox(height: AppSpacing.xs.h),
-                    // ── ID, remaining, deadline ──
-                    Row(children: [
-                      Text(
-                        'ID ${task.id.substring(0, 8)}',
-                        style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
-                      ),
-                      SizedBox(width: AppSpacing.sm.w),
-                      Container(
-                        width: 3.w,
-                        height: 3.w,
-                        decoration: BoxDecoration(
-                          color: AppColors.outline,
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                        ),
-                      ),
-                      SizedBox(width: AppSpacing.sm.w),
-                      Text(
-                        '剩余 $remaining/${task.totalQuantity}',
-                        style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
-                      ),
-                      if (task.deadline != null) ...[
-                        const Spacer(),
-                        Icon(Icons.access_time, size: 11.sp, color: AppColors.outline),
-                        SizedBox(width: 3.w),
-                        Text(
-                          '${task.deadline!.month}/${task.deadline!.day} 截止',
-                          style: TextStyle(fontSize: 11.sp, color: AppColors.outline),
-                        ),
-                      ],
-                    ]),
-                    SizedBox(height: AppSpacing.sm.h),
-                    // ── Progress bar ──
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(AppRadius.full),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: AppColors.surfaceVariant,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          progress >= 0.9 ? AppColors.orange : typeConfig.color,
-                        ),
-                        minHeight: 4.h,
-                      ),
-                    ),
-                    SizedBox(height: AppSpacing.sm.h),
-                    // ── "领取任务" button ──
-                    GestureDetector(
-                      onTap: () => context.push('/tasks/${task.id}'),
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm.h),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(AppRadius.sm.r),
-                          border: Border.all(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                            width: 1,
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '领取任务',
-                            style: TextStyle(
-                              fontSize: 14.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  _TypeVisual _typeVisual(TaskType type) => switch (type) {
-    TaskType.audio => const _TypeVisual(Icons.mic, AppColors.orange),
-    TaskType.image => const _TypeVisual(Icons.image, AppColors.primary),
-    TaskType.video => const _TypeVisual(Icons.videocam, AppColors.tertiary),
-    TaskType.text => const _TypeVisual(Icons.text_fields, AppColors.secondary),
-  };
-
   Widget _buildAdminEntryCard() {
     return Padding(
       padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
@@ -843,6 +619,38 @@ class _HomePageState extends ConsumerState<HomePage> {
       ),
     );
   }
+
+  Widget _buildTaskCreateEntryCard() {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
+      child: GestureDetector(
+        onTap: () => context.push('/tasks/create'),
+        child: Container(
+          padding: EdgeInsets.all(AppSpacing.dataGutter.w),
+          decoration: BoxDecoration(
+            color: AppColors.secondary.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(AppRadius.card.r),
+            border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
+          ),
+          child: Row(children: [
+            Container(
+              width: 40.w, height: 40.w,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Icon(Icons.add_task, size: 22.sp, color: AppColors.secondary),
+            ),
+            SizedBox(width: AppSpacing.sm.w),
+            Expanded(
+              child: Text('创建任务', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+            ),
+            Icon(Icons.chevron_right, size: 20.sp, color: AppColors.outline),
+          ]),
+        ),
+      ),
+    );
+  }
 }
 
 class _QuickNavItem {
@@ -851,10 +659,4 @@ class _QuickNavItem {
   final TaskType type;
   final Color color;
   const _QuickNavItem(this.icon, this.label, this.type, this.color);
-}
-
-class _TypeVisual {
-  final IconData icon;
-  final Color color;
-  const _TypeVisual(this.icon, this.color);
 }

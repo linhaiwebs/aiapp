@@ -57,7 +57,8 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
 
   /// Returns a string label for button text on task cards.
   String _actionLabel(ClaimStatus status) => switch (status) {
-    ClaimStatus.claimed || ClaimStatus.inProgress || ClaimStatus.pendingApproval => '继续采集',
+    ClaimStatus.claimed || ClaimStatus.inProgress => '继续采集',
+    ClaimStatus.pendingApproval => '等待审批',
     _ => '查看详情',
   };
 
@@ -231,7 +232,9 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
                     child: Text(_actionLabel(claim.status)),
                   )
                 : OutlinedButton(
-                    onPressed: () => context.push('/collection/${claim.id}'),
+                    onPressed: claim.status == ClaimStatus.submitted
+                        ? () => context.push('/submission/${claim.id}')
+                        : null,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.onSurface,
                       side: const BorderSide(color: AppColors.outlineVariant),

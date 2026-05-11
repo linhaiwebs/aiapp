@@ -46,13 +46,16 @@ export class TeamService {
       .createQueryBuilder('team')
       .leftJoinAndSelect('team.members', 'member');
 
-    // 团队隔离（普通用户）：仅返回所属团队。超级管理员看全部。
+    // 团队隔离（普通用户）：返回所属 + 待审批的团队。超级管理员看全部。
     if (userId && userRole !== 'super_admin') {
       const memberships = await this.memberRepository.find({
-        where: { userId, status: MemberStatus.APPROVED },
-        select: ['teamId'],
+        where: [
+          { userId, status: MemberStatus.APPROVED },
+          { userId, status: MemberStatus.PENDING },
+        ],
+        select: ['teamId', 'status'],
       });
-      const teamIds = memberships.map((m) => m.teamId);
+      const teamIds = [...new Set(memberships.map((m) => m.teamId))];
       if (teamIds.length === 0) {
         queryBuilder.andWhere('1 = 0');
       } else {

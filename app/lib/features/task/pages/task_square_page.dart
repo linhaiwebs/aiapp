@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/models/team_model.dart';
+import '../../../core/models/task_model.dart';
 import '../../../core/services/task_service.dart';
-import '../../../core/services/team_service.dart';
 import '../../../shared/widgets/skeleton.dart';
 
-/// 任务广场 → 已批准认领 Feed
-/// 展示全平台已批准/采集中/已完成的认领记录
+/// 任务大厅 — 未领取的可用任务列表
 
 class TaskSquarePage extends ConsumerStatefulWidget {
   const TaskSquarePage({super.key});
@@ -18,59 +17,24 @@ class TaskSquarePage extends ConsumerStatefulWidget {
 }
 
 class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
-  List<Map<String, dynamic>> _claims = [];
-  List<TeamModel> _myTeams = [];
-  String? _selectedTeamId;
+  List<TaskModel> _tasks = [];
+  String? _typeFilter;
   bool _isLoading = true;
-  int _page = 1;
-  bool _hasMore = true;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _loadTasks();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _loadTasks() async {
     setState(() => _isLoading = true);
     try {
-      final results = await Future.wait([
-        ref.read(taskServiceProvider).getApprovedClaims(page: 1),
-        ref.read(teamServiceProvider).getMyTeams(),
-      ]);
-      if (!mounted) return;
-      final claimsData = results[0] as Map<String, dynamic>;
-      final items = (claimsData['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final teams = results[1] as List<TeamModel>;
-      setState(() {
-        _claims = items;
-        _myTeams = teams;
-        _page = 1;
-        _hasMore = items.length >= 20;
-        _isLoading = false;
-      });
+      final tasks = await ref.read(taskServiceProvider).findAll(type: _typeFilter);
+      if (mounted) setState(() { _tasks = tasks; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _loadMore() async {
-    if (!_hasMore || _isLoading) return;
-    final nextPage = _page + 1;
-    try {
-      final data = await ref.read(taskServiceProvider).getApprovedClaims(
-        page: nextPage,
-        teamId: _selectedTeamId,
-      );
-      final items = (data['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      if (mounted) {
-        setState(() {
-          _claims.addAll(items);
-          _page = nextPage;
-          _hasMore = items.length >= 20;
-        });
-      }
-    } catch (_) {}
   }
 
   @override
@@ -83,8 +47,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
             SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm.h)),
             SliverToBoxAdapter(child: _buildHeader()),
             SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm.h)),
-            if (_myTeams.length > 1)
-              SliverToBoxAdapter(child: _buildTeamFilterRow()),
+            SliverToBoxAdapter(child: _buildTypeFilterRow()),
             SliverToBoxAdapter(child: _buildTitleRow()),
             SliverToBoxAdapter(child: SizedBox(height: AppSpacing.sm.h)),
             if (_isLoading)
@@ -92,7 +55,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
                 padding: EdgeInsets.symmetric(horizontal: AppSpacing.layoutMargin.w),
                 sliver: const SliverToBoxAdapter(child: SkeletonTaskList()),
               )
-            else if (_claims.isEmpty)
+            else if (_tasks.isEmpty)
               SliverFillRemaining(
                 child: Center(
                   child: Column(
@@ -100,7 +63,9 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
                     children: [
                       Icon(Icons.inbox_outlined, size: 48.sp, color: AppColors.outline),
                       SizedBox(height: AppSpacing.sm.h),
-                      Text('暂无认领记录', style: TextStyle(fontSize: 14.sp, color: AppColors.outline, fontWeight: FontWeight.w500)),
+                      Text('暂无可用任务', style: TextStyle(fontSize: 14.sp, color: AppColors.outline, fontWeight: FontWeight.w500)),
+                      SizedBox(height: 4.h),
+                      Text('当前团队暂无待领取的任务', style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant)),
                     ],
                   ),
                 ),
@@ -110,11 +75,8 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
                 padding: EdgeInsets.symmetric(horizontal: AppSpacing.layoutMargin.w),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (_, i) {
-                      if (i == _claims.length - 3) _loadMore();
-                      return _buildClaimCard(_claims[i]);
-                    },
-                    childCount: _claims.length,
+                    (_, i) => _buildTaskCard(_tasks[i]),
+                    childCount: _tasks.length,
                   ),
                 ),
               ),
@@ -136,52 +98,62 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
             SizedBox(width: AppSpacing.sm.w),
             Text('端云智采', style: TextStyle(fontSize: 22.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
           ]),
-          Container(
-            width: 40.w, height: 40.w,
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainer,
-              borderRadius: BorderRadius.circular(AppRadius.full),
-              border: Border.all(color: AppColors.outlineVariant, width: 0.5),
+          GestureDetector(
+            onTap: () => context.push('/my-tasks'),
+            child: Container(
+              width: 40.w, height: 40.w,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainer,
+                borderRadius: BorderRadius.circular(AppRadius.full),
+                border: Border.all(color: AppColors.outlineVariant, width: 0.5),
+              ),
+              child: Icon(Icons.assignment_outlined, size: 20.sp, color: AppColors.onSurface),
             ),
-            child: Icon(Icons.notifications_outlined, size: 20.sp, color: AppColors.onSurface),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTeamFilterRow() {
+  Widget _buildTypeFilterRow() {
+    final filters = [
+      const _FilterItem(null, '全部', Icons.apps),
+      const _FilterItem('audio', '音频', Icons.mic),
+      const _FilterItem('image', '图像', Icons.image),
+      const _FilterItem('video', '视频', Icons.videocam),
+      const _FilterItem('text', '文本', Icons.text_fields),
+    ];
+
     return Padding(
       padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.xs.h),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        child: Row(children: [
-          _buildTeamChip(null, '全部团队'),
-          ..._myTeams.map((t) => _buildTeamChip(t.id, t.name)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildTeamChip(String? teamId, String label) {
-    final active = _selectedTeamId == teamId;
-    return Padding(
-      padding: EdgeInsets.only(right: AppSpacing.sm.w),
-      child: GestureDetector(
-        onTap: () {
-          setState(() => _selectedTeamId = teamId);
-          _loadData();
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 7.h),
-          decoration: BoxDecoration(
-            color: active ? AppColors.secondary.withValues(alpha: 0.20) : AppColors.surfaceVariant,
-            borderRadius: BorderRadius.circular(AppRadius.full),
-            border: active ? Border.all(color: AppColors.secondary.withValues(alpha: 0.40), width: 1) : null,
-          ),
-          child: Text(label, style: TextStyle(fontSize: 12.sp, color: active ? AppColors.secondary : AppColors.onSurfaceVariant, fontWeight: FontWeight.w600)),
-        ),
+        child: Row(children: filters.map((f) {
+          final active = _typeFilter == f.type;
+          return Padding(
+            padding: EdgeInsets.only(right: AppSpacing.sm.w),
+            child: GestureDetector(
+              onTap: () {
+                setState(() => _typeFilter = f.type);
+                _loadTasks();
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 7.h),
+                decoration: BoxDecoration(
+                  color: active ? AppColors.primary.withValues(alpha: 0.12) : AppColors.surfaceVariant,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  border: active ? Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1) : null,
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(f.icon, size: 14.sp, color: active ? AppColors.primary : AppColors.onSurfaceVariant),
+                  SizedBox(width: 4.w),
+                  Text(f.label, style: TextStyle(fontSize: 12.sp, color: active ? AppColors.primary : AppColors.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                ]),
+              ),
+            ),
+          );
+        }).toList()),
       ),
     );
   }
@@ -192,27 +164,19 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text('采集动态', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-          Text('共 ${_claims.length} 条', style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.outline)),
+          Text('任务大厅', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+          Text('共 ${_tasks.length} 个任务', style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.outline)),
         ],
       ),
     );
   }
 
-  Widget _buildClaimCard(Map<String, dynamic> claim) {
-    final task = claim['task'] as Map<String, dynamic>? ?? {};
-    final user = claim['user'] as Map<String, dynamic>? ?? {};
-    final team = task['team'] as Map<String, dynamic>? ?? {};
-    final taskType = task['type'] as String? ?? '';
-    final taskTitle = task['title'] as String? ?? '未知任务';
-    final userName = user['nickname'] as String? ?? user['phone'] as String? ?? '匿名用户';
-    final teamName = team['name'] as String?;
-    final claimedAt = claim['claimedAt'] as String?;
-    final status = claim['status'] as String? ?? '';
-
-    final typeCfg = _typeConfigFor(taskType);
-    final timeStr = claimedAt != null ? _formatTime(DateTime.parse(claimedAt)) : '';
-    final statusLabel = _statusLabel(status);
+  Widget _buildTaskCard(TaskModel task) {
+    final typeCfg = _typeConfig(task.type);
+    final remaining = task.totalQuantity - task.claimedQuantity;
+    final progress = task.totalQuantity > 0
+        ? (task.claimedQuantity / task.totalQuantity).clamp(0.0, 1.0)
+        : 0.0;
 
     return Container(
       margin: EdgeInsets.only(bottom: AppSpacing.listGap.h),
@@ -222,100 +186,123 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
         border: Border.all(color: AppColors.outlineVariant, width: 1),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 8, offset: const Offset(0, 2))],
       ),
-      child: Padding(
-        padding: EdgeInsets.all(AppSpacing.cardPadding.w),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            // Avatar
-            Container(
-              width: 36.w, height: 36.w,
+      child: Stack(
+        children: [
+          Positioned(
+            top: -16.h,
+            right: -16.w,
+            child: Container(
+              width: 64.w,
+              height: 64.w,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [AppColors.primary, AppColors.primaryContainer]),
-                borderRadius: BorderRadius.circular(AppRadius.full),
+                shape: BoxShape.circle,
+                color: typeCfg.color.withValues(alpha: 0.06),
               ),
-              child: Center(child: Text(userName.substring(0, 1).toUpperCase(), style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w700, color: Colors.white))),
             ),
-            SizedBox(width: AppSpacing.sm.w),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Row(children: [
-                Flexible(child: Text(userName, style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface), overflow: TextOverflow.ellipsis)),
-                SizedBox(width: AppSpacing.xs.w),
-                if (typeCfg != null)
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                    decoration: BoxDecoration(color: typeCfg.color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(4.r)),
-                    child: Text(typeCfg.label, style: TextStyle(fontSize: 10.sp, fontWeight: FontWeight.w700, color: typeCfg.color)),
-                  ),
-              ]),
-              SizedBox(height: 2.h),
-              Text(timeStr, style: TextStyle(fontSize: 11.sp, color: AppColors.outline)),
-            ])),
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(AppRadius.sm.r),
-              ),
-              child: Text(statusLabel, style: TextStyle(fontSize: 11.sp, color: AppColors.primary, fontWeight: FontWeight.w600)),
-            ),
-          ]),
-          SizedBox(height: AppSpacing.sm.h),
-          // Task info
-          Container(
-            padding: EdgeInsets.all(AppSpacing.sm.w),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
-              borderRadius: BorderRadius.circular(AppRadius.sm.r),
-            ),
-            child: Row(children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(taskTitle, style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w500, color: AppColors.onSurface), maxLines: 1, overflow: TextOverflow.ellipsis),
-                if (teamName != null) ...[
-                  SizedBox(height: 4.h),
-                  Row(children: [
-                    Icon(Icons.group, size: 12.sp, color: AppColors.outline),
-                    SizedBox(width: 4.w),
-                    Text(teamName, style: TextStyle(fontSize: 11.sp, color: AppColors.outline)),
-                  ]),
-                ],
-              ])),
-              Icon(Icons.chevron_right, size: 18.sp, color: AppColors.outline),
-            ]),
           ),
-        ]),
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.md.r),
+            child: InkWell(
+              onTap: () => context.push('/tasks/${task.id}'),
+              borderRadius: BorderRadius.circular(AppRadius.md.r),
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.cardPadding.w),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm.w, vertical: 2.h),
+                        decoration: BoxDecoration(
+                          color: typeCfg.color.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(AppRadius.sm.r),
+                          border: Border.all(color: typeCfg.color.withValues(alpha: 0.3), width: 1),
+                        ),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(typeCfg.icon, size: 12.sp, color: typeCfg.color),
+                          SizedBox(width: 4.w),
+                          Text(task.typeLabel, style: TextStyle(fontSize: 11.sp, color: typeCfg.color, fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                      const Spacer(),
+                      if (task.unitPrice > 0)
+                        Text(task.priceLabel, style: TextStyle(fontSize: 14.sp, color: AppColors.secondary, fontWeight: FontWeight.w700)),
+                    ]),
+                    SizedBox(height: AppSpacing.sm.h),
+                    Text(
+                      task.title,
+                      style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface, height: 1.3),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    SizedBox(height: AppSpacing.xs.h),
+                    Row(children: [
+                      Text('ID ${task.id.substring(0, 8)}', style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant)),
+                      SizedBox(width: AppSpacing.sm.w),
+                      Container(width: 3.w, height: 3.w, decoration: BoxDecoration(color: AppColors.outline, borderRadius: BorderRadius.circular(AppRadius.full))),
+                      SizedBox(width: AppSpacing.sm.w),
+                      Text('剩余 $remaining/${task.totalQuantity}', style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant)),
+                      if (task.deadline != null) ...[
+                        const Spacer(),
+                        Icon(Icons.access_time, size: 11.sp, color: AppColors.outline),
+                        SizedBox(width: 3.w),
+                        Text('${task.deadline!.month}/${task.deadline!.day} 截止', style: TextStyle(fontSize: 11.sp, color: AppColors.outline)),
+                      ],
+                    ]),
+                    SizedBox(height: AppSpacing.sm.h),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.full),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: AppColors.surfaceVariant,
+                        valueColor: AlwaysStoppedAnimation<Color>(progress >= 0.9 ? AppColors.orange : typeCfg.color),
+                        minHeight: 4.h,
+                      ),
+                    ),
+                    SizedBox(height: AppSpacing.sm.h),
+                    GestureDetector(
+                      onTap: () => context.push('/tasks/${task.id}'),
+                      child: Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm.h),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(AppRadius.sm.r),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1),
+                        ),
+                        child: Center(
+                          child: Text('领取任务', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  String _statusLabel(String status) => switch (status) {
-    'claimed' => '已领取',
-    'in_progress' => '采集中',
-    'submitted' => '已提交',
-    'completed' => '已完成',
-    _ => status,
+  _TaskTypeCfg _typeConfig(TaskType type) => switch (type) {
+    TaskType.audio => const _TaskTypeCfg(Icons.mic, AppColors.orange),
+    TaskType.image => const _TaskTypeCfg(Icons.image, AppColors.primary),
+    TaskType.video => const _TaskTypeCfg(Icons.videocam, AppColors.tertiary),
+    TaskType.text => const _TaskTypeCfg(Icons.text_fields, AppColors.secondary),
   };
-
-  _TypeCfg? _typeConfigFor(String type) => switch (type) {
-    'audio' => const _TypeCfg('音频', AppColors.orange),
-    'image' => const _TypeCfg('图像', AppColors.primary),
-    'video' => const _TypeCfg('视频', AppColors.tertiary),
-    'text' => const _TypeCfg('文本', AppColors.secondary),
-    _ => null,
-  };
-
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
-    if (diff.inHours < 24) return '${diff.inHours}小时前';
-    if (diff.inDays < 7) return '${diff.inDays}天前';
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
-  }
 }
 
-class _TypeCfg {
+class _FilterItem {
+  final String? type;
   final String label;
+  final IconData icon;
+  const _FilterItem(this.type, this.label, this.icon);
+}
+
+class _TaskTypeCfg {
+  final IconData icon;
   final Color color;
-  const _TypeCfg(this.label, this.color);
+  const _TaskTypeCfg(this.icon, this.color);
 }

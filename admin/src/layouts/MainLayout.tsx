@@ -24,16 +24,7 @@ const menuItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: '仪表盘' },
   { key: '/projects', icon: <ProjectOutlined />, label: '项目管理' },
   { key: '/tasks', icon: <FileTextOutlined />, label: '任务管理' },
-  {
-    key: '/review',
-    icon: <AuditOutlined />,
-    label: '审核项目',
-    children: [
-      { key: '/review/claims', label: '申请审批' },
-      { key: '/review/submissions', label: '提交审核' },
-      { key: '/claims', label: '任务认领' },
-    ],
-  },
+  { key: '/claims', icon: <AuditOutlined />, label: '任务认领' },
   {
     key: '/collections',
     icon: <FolderOutlined />,
@@ -77,8 +68,7 @@ export default function MainLayout() {
   };
 
   const selectedKey = location.pathname;
-  const openKeys = location.pathname.startsWith('/collections') || location.pathname === '/text-collections' ? ['/collections'] :
-                   location.pathname.startsWith('/review') || location.pathname.startsWith('/claims') ? ['/review'] : [];
+  const openKeys = location.pathname.startsWith('/collections') || location.pathname === '/text-collections' ? ['/collections'] : [];
 
   const userMenuItems = [
     {
