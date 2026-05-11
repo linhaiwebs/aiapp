@@ -27,11 +27,12 @@ export class TeamController {
   @ApiOperation({ summary: '我的团队列表' })
   async findAll(
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
     @Query('page') page = 1,
     @Query('pageSize') pageSize = 20,
     @Query('keyword') keyword?: string,
   ) {
-    return this.teamService.findAll(page, pageSize, keyword, userId);
+    return this.teamService.findAll(page, pageSize, keyword, userId, role);
   }
 
   @Get(':id')
@@ -41,8 +42,9 @@ export class TeamController {
   async findOne(
     @Param('id') id: string,
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    return this.teamService.findOne(id, userId);
+    return this.teamService.findOne(id, userId, role);
   }
 
   @Get(':id/members')
@@ -52,8 +54,9 @@ export class TeamController {
   async getMembers(
     @Param('id') id: string,
     @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: string,
   ) {
-    return this.teamService.getMembers(id, userId);
+    return this.teamService.getMembers(id, userId, role);
   }
 
   @Post()
@@ -61,8 +64,11 @@ export class TeamController {
   @ApiBearerAuth()
   @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
   @ApiOperation({ summary: '创建团队' })
-  async create(@Body() dto: CreateTeamDto) {
-    return this.teamService.create(dto);
+  async create(
+    @Body() dto: CreateTeamDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.teamService.create(dto, userId);
   }
 
   @Patch(':id')

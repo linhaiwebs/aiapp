@@ -20,18 +20,34 @@ export class TeamService {
     private userRepository: Repository<User>,
   ) {}
 
-  async create(dto: CreateTeamDto): Promise<Team> {
+  async create(dto: CreateTeamDto, userId?: string): Promise<Team> {
     const team = this.teamRepository.create(dto);
-    return this.teamRepository.save(team);
+    const saved = await this.teamRepository.save(team);
+
+    // 自动将创建者添加为团长（已审批）
+    if (userId) {
+      const user = await this.userRepository.findOne({ where: { id: userId } });
+      const member = this.memberRepository.create({
+        teamId: saved.id,
+        userId,
+        userName: user?.nickname || user?.phone || dto.leaderName || undefined,
+        phone: user?.phone || undefined,
+        role: TeamMemberRole.LEADER,
+        status: MemberStatus.APPROVED,
+      });
+      await this.memberRepository.save(member);
+    }
+
+    return saved;
   }
 
-  async findAll(page = 1, pageSize = 20, keyword?: string, userId?: string) {
+  async findAll(page = 1, pageSize = 20, keyword?: string, userId?: string, userRole?: string) {
     const queryBuilder = this.teamRepository
       .createQueryBuilder('team')
       .leftJoinAndSelect('team.members', 'member');
 
-    // 仅返回用户所属的团队（已审批通过的）
-    if (userId) {
+    // 团队隔离（普通用户）：仅返回所属团队。超级管理员看全部。
+    if (userId && userRole !== 'super_admin') {
       const memberships = await this.memberRepository.find({
         where: { userId, status: MemberStatus.APPROVED },
         select: ['teamId'],
@@ -59,19 +75,19 @@ export class TeamService {
     const [items, total] = await queryBuilder.getManyAndCount();
 
     // 非团长用户剔除 joinCode
-    const masked = items.map((team) => this.maskJoinCode(team, userId));
+    const masked = items.map((team) => this.maskJoinCode(team, userId, userRole));
     return { items: masked, total, page, pageSize };
   }
 
-  async findOne(id: string, userId?: string): Promise<Team> {
+  async findOne(id: string, userId?: string, userRole?: string): Promise<Team> {
     const team = await this.teamRepository.findOne({
       where: { id },
       relations: ['members'],
     });
     if (!team) throw new NotFoundException('团队不存在');
 
-    // 成员身份校验
-    if (userId) {
+    // 成员身份校验（超级管理员跳过）
+    if (userId && userRole !== 'super_admin') {
       const isMember = team.members?.some(
         (m) => m.userId === userId && m.status === MemberStatus.APPROVED,
       );
@@ -80,7 +96,7 @@ export class TeamService {
       }
     }
 
-    return this.maskJoinCode(team, userId);
+    return this.maskJoinCode(team, userId, userRole);
   }
 
   async update(id: string, dto: CreateTeamDto): Promise<Team> {
@@ -136,9 +152,9 @@ export class TeamService {
     return this.memberRepository.save(member);
   }
 
-  async getMembers(teamId: string, userId?: string) {
-    // 非成员不能查看成员列表
-    if (userId) {
+  async getMembers(teamId: string, userId?: string, userRole?: string) {
+    // 非成员不能查看成员列表（超级管理员跳过）
+    if (userId && userRole !== 'super_admin') {
       const isMember = await this.memberRepository.findOne({
         where: { teamId, userId, status: MemberStatus.APPROVED },
       });
@@ -220,9 +236,10 @@ export class TeamService {
     return this.memberRepository.save(member);
   }
 
-  /** 屏蔽非团长的 joinCode */
-  private maskJoinCode(team: Team, userId?: string): any {
+  /** 屏蔽非团长的 joinCode（超级管理员始终可见） */
+  private maskJoinCode(team: Team, userId?: string, userRole?: string): any {
     if (!userId) return team;
+    if (userRole === 'super_admin') return team;
     const isLeader = team.members?.some(
       (m) => m.userId === userId && m.role === TeamMemberRole.LEADER && m.status === MemberStatus.APPROVED,
     );
