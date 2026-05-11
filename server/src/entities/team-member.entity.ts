@@ -58,7 +58,7 @@ export class TeamMember {
   })
   status: MemberStatus;
 
-  @Column({ length: 500, nullable: true })
+  @Column({ type: 'varchar', length: 500, nullable: true })
   rejectReason: string | null;
 
   @CreateDateColumn()
