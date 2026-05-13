@@ -29,11 +29,16 @@ export class TaskService {
       Object.entries(dto).filter(([, v]) => v !== null && v !== undefined),
     );
 
-    // Auto-inherit teamId from project when not explicitly set
-    if (cleanDto.projectId && !cleanDto.teamId) {
+    // Auto-inherit teamId and type from project when not explicitly set
+    if (cleanDto.projectId) {
       const project = await this.projectRepository.findOne({ where: { id: cleanDto.projectId } });
-      if (project?.teamId) {
-        cleanDto.teamId = project.teamId;
+      if (project) {
+        if (!cleanDto.teamId && project.teamId) {
+          cleanDto.teamId = project.teamId;
+        }
+        if (!cleanDto.type && project.type) {
+          cleanDto.type = project.type;
+        }
       }
     }
 

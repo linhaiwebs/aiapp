@@ -1,10 +1,16 @@
-import { IsString, IsOptional, IsDateString, IsBoolean, IsNumber } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsOptional, IsDateString, IsBoolean, IsNumber, IsEnum } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { TaskType } from '../../../entities';
 
 export class CreateProjectDto {
   @ApiProperty({ description: '项目名称' })
   @IsString()
   name: string;
+
+  @ApiPropertyOptional({ description: '默认任务类型', enum: TaskType })
+  @IsEnum(TaskType)
+  @IsOptional()
+  type?: TaskType;
 
   @ApiProperty({ description: '项目描述', required: false })
   @IsString()

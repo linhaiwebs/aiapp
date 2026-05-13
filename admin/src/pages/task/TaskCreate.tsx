@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Form, Input, Select, InputNumber, DatePicker, Button, Spin, message, Row, Col, Switch, Divider, Tabs } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { taskApi, projectApi, categoryApi, textCollectionApi } from '../../api';
+import { taskApi, projectApi, categoryApi, textCollectionApi, projectDocumentApi } from '../../api';
 
 export default function TaskForm() {
   const { id } = useParams();
@@ -13,9 +13,10 @@ export default function TaskForm() {
   const [fetching, setFetching] = useState(!!id);
   const [projects, setProjects] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [taskType, setTaskType] = useState<string>('audio');
   const [textContent, setTextContent] = useState('');
   const [savingText, setSavingText] = useState(false);
+  const [projectDocs, setProjectDocs] = useState<any[]>([]);
+  const [loadingDoc, setLoadingDoc] = useState(false);
   const isEdit = !!id;
 
   useEffect(() => {
@@ -36,6 +37,36 @@ export default function TaskForm() {
     }
   };
 
+  const loadProjectDocs = async (projectId: string) => {
+    if (!projectId) {
+      setProjectDocs([]);
+      return;
+    }
+    try {
+      const res: any = await projectDocumentApi.list(projectId);
+      setProjectDocs(Array.isArray(res) ? res : []);
+    } catch {
+      setProjectDocs([]);
+    }
+  };
+
+  const handleSelectDoc = async (docId: string) => {
+    if (!docId) return;
+    const projectId = form.getFieldValue('projectId');
+    if (!projectId) return;
+    setLoadingDoc(true);
+    try {
+      const res: any = await projectDocumentApi.detail(projectId, docId);
+      if (res?.content) {
+        form.setFieldsValue({ instructions: res.content });
+      }
+    } catch {
+      message.error('加载文档内容失败');
+    } finally {
+      setLoadingDoc(false);
+    }
+  };
+
   const loadTask = async () => {
     try {
       const res: any = await taskApi.detail(id!);
@@ -45,7 +76,6 @@ export default function TaskForm() {
         categoryId: res.category?.id,
         projectId: res.project?.id,
       });
-      setTaskType(res.type || 'audio');
     } catch {
       message.error('加载任务失败');
     } finally {
@@ -126,6 +156,21 @@ export default function TaskForm() {
 
   if (fetching) return <Spin style={{ display: 'block', margin: '100px auto' }} />;
 
+  const watchedProjectId = Form.useWatch('projectId', form);
+  const watchedType = Form.useWatch('type', form);
+  const taskType: string = watchedType || 'audio';
+
+  useEffect(() => {
+    loadProjectDocs(watchedProjectId);
+    // 自动从项目继承任务类型
+    if (watchedProjectId) {
+      const project = projects.find((p: any) => p.id === watchedProjectId);
+      if (project?.type) {
+        form.setFieldsValue({ type: project.type });
+      }
+    }
+  }, [watchedProjectId, projects]);
+
   return (
     <Row gutter={24}>
       <Col span={taskType === 'text' ? 16 : 24}>
@@ -148,7 +193,6 @@ export default function TaskForm() {
             status: 'in_progress',
             maxClaimsPerUser: 1,
             minQualityScore: 60,
-            type: 'audio',
             qcMethod: 'spot_check',
             audioFormat: 'wav',
             audioChannel: 'mono',
@@ -182,16 +226,13 @@ export default function TaskForm() {
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="type" label="任务类型" tooltip="采集数据类型：语音、图像、视频或文本" rules={[{ required: true }]}>
-                          <Select
-                            onChange={(v) => setTaskType(v)}
-                            options={[
-                              { label: '语音', value: 'audio' },
-                              { label: '图像', value: 'image' },
-                              { label: '视频', value: 'video' },
-                              { label: '文本', value: 'text' },
-                            ]}
-                          />
+                        <Form.Item name="type" label="任务类型" tooltip="由所属项目决定，不可手动更改">
+                          <Select disabled options={[
+                            { label: '语音', value: 'audio' },
+                            { label: '图像', value: 'image' },
+                            { label: '视频', value: 'video' },
+                            { label: '文本', value: 'text' },
+                          ]} />
                         </Form.Item>
                       </Col>
                       <Col span={8}>
@@ -262,6 +303,21 @@ export default function TaskForm() {
                             allowClear
                             placeholder="选择分类"
                             options={categories.map((c: any) => ({ label: c.name, value: c.id }))}
+                          />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item label="从项目文档填充" tooltip="选择项目下已上传的文本，内容将自动填充到任务说明">
+                          <Select
+                            allowClear
+                            loading={loadingDoc}
+                            placeholder="选择文档（可选）"
+                            options={projectDocs.map((d: any) => ({ label: d.title, value: d.id }))}
+                            onChange={handleSelectDoc}
+                            notFoundContent={!watchedProjectId ? '请先选择项目' : '该项目暂无上传的文档'}
                           />
                         </Form.Item>
                       </Col>

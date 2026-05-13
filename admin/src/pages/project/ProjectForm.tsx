@@ -114,6 +114,18 @@ export default function ProjectForm() {
 
           <Row gutter={16}>
             <Col span={8}>
+              <Form.Item name="type" label="任务类型" tooltip="该项目下任务的默认类型，创建任务时将自动继承" rules={[{ required: true, message: '请选择任务类型' }]}>
+                <Select
+                  options={[
+                    { label: '语音', value: 'audio' },
+                    { label: '图像', value: 'image' },
+                    { label: '视频', value: 'video' },
+                    { label: '文本', value: 'text' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
               <Form.Item name="startDate" label="开始日期" tooltip="项目预计开始的日期">
                 <DatePicker style={{ width: '100%' }} />
               </Form.Item>
@@ -123,14 +135,14 @@ export default function ProjectForm() {
                 <DatePicker style={{ width: '100%' }} />
               </Form.Item>
             </Col>
+          </Row>
+
+          <Row gutter={16}>
             <Col span={8}>
               <Form.Item name="department" label="部门识别方式" tooltip="用于识别参与者所属部门的标识方式">
                 <Input placeholder="如：研发部" />
               </Form.Item>
             </Col>
-          </Row>
-
-          <Row gutter={16}>
             <Col span={8}>
               <Form.Item name="teamId" label="所属团队" tooltip="项目归属于该团队，仅团队成员可处理此项目下的任务">
                 <Select
@@ -153,6 +165,9 @@ export default function ProjectForm() {
                 />
               </Form.Item>
             </Col>
+          </Row>
+
+          <Row gutter={16}>
             <Col span={8}>
               <Form.Item name="acceptorId" label="验收人" tooltip="指定负责验收项目成果的用户">
                 <Select
@@ -162,14 +177,6 @@ export default function ProjectForm() {
                   optionFilterProp="label"
                   options={users.map((u: any) => ({ label: u.nickname || u.phone, value: u.id }))}
                 />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="requireSignature" label="授权签名" valuePropName="checked" tooltip="开启后采集员提交时需要电子签名授权">
-                <Switch checkedChildren="需要" unCheckedChildren="不需要" />
               </Form.Item>
             </Col>
             <Col span={8}>
@@ -183,6 +190,14 @@ export default function ProjectForm() {
               </Form.Item>
             </Col>
           </Row>
+
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item name="requireSignature" label="授权签名" valuePropName="checked" tooltip="开启后采集员提交时需要电子签名授权">
+                  <Switch checkedChildren="需要" unCheckedChildren="不需要" />
+                </Form.Item>
+              </Col>
+            </Row>
 
           <Form.Item>
             <Button type="primary" htmlType="submit" loading={loading}>

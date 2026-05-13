@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TaskType, TaskDifficulty, TaskStatus, QcMethod, AudioFormat, AudioChannel, SampleRate } from '../../../entities';
 
 export class CreateTaskDto {
@@ -13,9 +13,10 @@ export class CreateTaskDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ description: '任务类型', enum: TaskType })
+  @ApiPropertyOptional({ description: '任务类型（不传则继承所属项目的类型）', enum: TaskType })
   @IsEnum(TaskType)
-  type: TaskType;
+  @IsOptional()
+  type?: TaskType;
 
   @ApiProperty({ description: '任务状态', enum: TaskStatus, required: false, default: TaskStatus.DRAFT })
   @IsEnum(TaskStatus)

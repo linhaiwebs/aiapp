@@ -124,3 +124,13 @@ export const exportApi = {
   submissions: (params?: any) => api.get('/admin/export/submissions', { params, responseType: params?.format === 'json' ? 'json' : 'blob' }),
   audioLinks: (params?: any) => api.get('/admin/export/audio-links', { params }),
 };
+
+export const projectDocumentApi = {
+  list: (projectId: string) => api.get(`/projects/${projectId}/documents`),
+  detail: (projectId: string, docId: string) => api.get(`/projects/${projectId}/documents/${docId}`),
+  create: (projectId: string, data: { title: string; content: string; fileName?: string }) =>
+    api.post(`/projects/${projectId}/documents`, data),
+  batchCreate: (projectId: string, data: { documents: { title: string; content: string; fileName?: string }[] }) =>
+    api.post(`/projects/${projectId}/documents/batch`, data),
+  remove: (projectId: string, docId: string) => api.delete(`/projects/${projectId}/documents/${docId}`),
+};
