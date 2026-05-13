@@ -19,6 +19,17 @@ export default function TaskForm() {
   const [loadingDoc, setLoadingDoc] = useState(false);
   const isEdit = !!id;
 
+  // 多人分配相关
+  const assignMode: string = Form.useWatch('textAssignMode', form) || 'auto';
+  const assignTotal: number = Form.useWatch('totalQuantity', form) || 0;
+  const assignPeople: number = Form.useWatch('textAssignCount', form) || 0;
+  const evenPreview = assignPeople > 0 ? Math.ceil(assignTotal / assignPeople) : 0;
+
+  useEffect(() => {
+    if (assignMode !== 'even') form.setFieldsValue({ textAssignCount: undefined });
+    if (assignMode !== 'per_user') form.setFieldsValue({ textPerUserCount: undefined });
+  }, [assignMode, form]);
+
   useEffect(() => {
     loadOptions();
     if (id) loadTask();
@@ -200,6 +211,7 @@ export default function TaskForm() {
             allowMultipleClaims: false,
             reviewRounds: 1,
             recycleHours: 48,
+            textAssignMode: 'auto',
             textAssignCount: 0,
             textPerUserCount: 0,
             textCopyForAssign: false,
@@ -400,20 +412,56 @@ export default function TaskForm() {
                           <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
-                      <Col span={8}>
-                        <Form.Item name="textAssignCount" label="文本分配人数" tooltip="指定分配给多少位采集员，0=系统自动分配">
-                          <InputNumber min={0} style={{ width: '100%' }} placeholder="0=自动" />
-                        </Form.Item>
-                      </Col>
-                      <Col span={8}>
-                        <Form.Item name="textPerUserCount" label="每人条数" tooltip="每人固定分配X条文本，>0时优先于分配人数模式">
-                          <InputNumber min={0} style={{ width: '100%' }} placeholder="0=不启用" />
-                        </Form.Item>
-                      </Col>
                     </Row>
+
+                    <Divider orientation="left" orientationMargin={0}>多人分配</Divider>
+
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="textCopyForAssign" label="复制多份分配" valuePropName="checked" tooltip="开启后将文本复制多份分配给不同采集员">
+                        <Form.Item name="textAssignMode" label="分配模式" tooltip="文本多人分配的策略模式">
+                          <Select
+                            options={[
+                              { label: '自动分配', value: 'auto' },
+                              { label: '平均分配（指定人数）', value: 'even' },
+                              { label: '每人指定数量', value: 'per_user' },
+                            ]}
+                          />
+                        </Form.Item>
+                      </Col>
+
+                      {assignMode === 'even' && (
+                        <>
+                          <Col span={6}>
+                            <Form.Item name="textAssignCount" label="分配人数" tooltip="将文本平均分配给指定数量的采集员" rules={[{ required: true, message: '请输入分配人数' }]}>
+                              <InputNumber min={1} style={{ width: '100%' }} placeholder="如：10" />
+                            </Form.Item>
+                          </Col>
+                          <Col span={6}>
+                            <Form.Item label="预计每人">
+                              <InputNumber
+                                disabled
+                                value={evenPreview}
+                                style={{ width: '100%', color: evenPreview > 0 ? '#1677ff' : '#999' }}
+                                prefix={evenPreview > 0 ? '≈' : undefined}
+                                suffix="条"
+                              />
+                            </Form.Item>
+                          </Col>
+                        </>
+                      )}
+
+                      {assignMode === 'per_user' && (
+                        <Col span={6}>
+                          <Form.Item name="textPerUserCount" label="每人条数" tooltip="每位采集员固定分配X条文本" rules={[{ required: true, message: '请输入每人条数' }]}>
+                            <InputNumber min={1} style={{ width: '100%' }} placeholder="如：100" />
+                          </Form.Item>
+                        </Col>
+                      )}
+                    </Row>
+
+                    <Row gutter={16}>
+                      <Col span={8}>
+                        <Form.Item name="textCopyForAssign" label="复制多份分配" valuePropName="checked" tooltip="开启后将文本复制多份分配给不同采集员（同一文本多人采集）">
                           <Switch />
                         </Form.Item>
                       </Col>

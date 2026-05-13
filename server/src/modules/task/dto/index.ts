@@ -1,7 +1,7 @@
 import { IsString, IsOptional, IsEnum, IsNumber, IsDateString, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { TaskType, TaskDifficulty, TaskStatus, QcMethod, AudioFormat, AudioChannel, SampleRate } from '../../../entities';
+import { TaskType, TaskDifficulty, TaskStatus, QcMethod, AudioFormat, AudioChannel, SampleRate, TextAssignMode } from '../../../entities';
 
 export class CreateTaskDto {
   @ApiProperty({ description: '任务标题' })
@@ -187,6 +187,11 @@ export class CreateTaskDto {
   @IsBoolean()
   @IsOptional()
   textCopyForAssign?: boolean;
+
+  @ApiProperty({ description: '文本分配模式：auto=自动 | even=平均分配 | per_user=每人指定', enum: TextAssignMode, required: false })
+  @IsEnum(TextAssignMode)
+  @IsOptional()
+  textAssignMode?: TextAssignMode;
 }
 
 export class UpdateTaskDto {
@@ -335,6 +340,10 @@ export class UpdateTaskDto {
   @IsBoolean()
   @IsOptional()
   textCopyForAssign?: boolean;
+
+  @IsEnum(TextAssignMode)
+  @IsOptional()
+  textAssignMode?: TextAssignMode;
 }
 
 export class TaskFilterDto {

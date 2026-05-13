@@ -191,23 +191,29 @@ export class TextCollectionService {
 
       if (claims.length === 0) throw new BadRequestException('没有可分配的用户');
 
-      // Determine per-user count:
-      // 1. dto.perUserCount (explicit in request) takes priority
-      // 2. task.textPerUserCount (每人X条 from task config)
-      // 3. dto.assignCount (分配人数, split among N people)
-      // 4. Auto: split equally among all claimants
-      const perUserCount = dto.perUserCount || task?.textPerUserCount || 0;
+      // Determine per-user count based on task.textAssignMode:
+      // even   = 平均分配：textAssignCount=人数，文本总数/人数=每人条数
+      // per_user = 每人指定：textPerUserCount=每人固定条数
+      // auto   = 均分给所有已领取用户（默认）
+      const mode = task?.textAssignMode || 'auto';
       const assignCount = dto.assignCount || task?.textAssignCount || 0;
+      const perUserCount = dto.perUserCount || task?.textPerUserCount || 0;
       let perUser: number;
 
-      if (perUserCount > 0) {
-        // 每人X条模式：每人分配固定条数
+      if (mode === 'per_user' && perUserCount > 0) {
+        // 每人指定X条模式
+        perUser = perUserCount;
+      } else if (mode === 'even' && assignCount > 0) {
+        // 平均分配：指定N个人，均分所有文本
+        perUser = Math.ceil(unassignedTexts.length / assignCount);
+      } else if (perUserCount > 0) {
+        // 兼容旧逻辑：dto.perUserCount 或 task.textPerUserCount
         perUser = perUserCount;
       } else if (assignCount > 0) {
-        // 分配人数模式：均分给N个人
+        // 兼容旧逻辑：dto.assignCount 或 task.textAssignCount
         perUser = Math.ceil(unassignedTexts.length / assignCount);
       } else {
-        // 自动模式：均分给所有已领取用户
+        // 默认：均分给所有已领取用户
         perUser = Math.ceil(unassignedTexts.length / claims.length);
       }
 

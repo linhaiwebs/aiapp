@@ -1,6 +1,6 @@
 export { User, UserRole, UserStatus } from './user.entity';
 export { UserProfile, VerificationStatus } from './user-profile.entity';
-export { Task, TaskType, TaskStatus, TaskReviewStatus, TaskDifficulty, QcMethod, AudioFormat, AudioChannel, SampleRate } from './task.entity';
+export { Task, TaskType, TaskStatus, TaskReviewStatus, TaskDifficulty, QcMethod, AudioFormat, AudioChannel, SampleRate, TextAssignMode } from './task.entity';
 export { TaskRequirement } from './task-requirement.entity';
 export { TaskSample } from './task-sample.entity';
 export { TaskClaim, ClaimStatus } from './task-claim.entity';

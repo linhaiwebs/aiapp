@@ -64,6 +64,16 @@ export enum SampleRate {
   SR_48000 = 48000,
 }
 
+/** 文本分配模式 */
+export enum TextAssignMode {
+  /** 自动分配（均分给所有已领取用户） */
+  AUTO = 'auto',
+  /** 平均分配：指定N个人，均分所有文本 */
+  EVEN = 'even',
+  /** 每人指定：每人固定X条 */
+  PER_USER = 'per_user',
+}
+
 @Entity('tasks')
 export class Task {
   @PrimaryGeneratedColumn('uuid')
@@ -228,6 +238,14 @@ export class Task {
   /** 是否复制多份文本分配给多名采集人员 */
   @Column({ default: false })
   textCopyForAssign: boolean;
+
+  /** 文本分配模式：auto=自动 | even=平均分配 | per_user=每人指定 */
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: TextAssignMode.AUTO,
+  })
+  textAssignMode: TextAssignMode;
 
   // ===== 关联 =====
   @ManyToOne(() => Project, (project) => project.tasks, { nullable: true })
