@@ -8,7 +8,8 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { Task, TaskType } from './task.entity';
+import { Task } from './task.entity';
+import type { TaskType } from './task.entity';
 import { User } from './user.entity';
 import { Team } from './team.entity';
 
@@ -26,8 +27,8 @@ export class Project {
   /** 项目默认任务类型 */
   @Column({
     type: 'simple-enum',
-    enum: TaskType,
-    default: TaskType.AUDIO,
+    enum: ['audio', 'image', 'video', 'text'],
+    default: 'audio',
   })
   type: TaskType;
 
