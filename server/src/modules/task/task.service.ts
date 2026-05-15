@@ -221,13 +221,13 @@ export class TaskService {
       throw new BadRequestException('您已申请或领取了此任务');
     }
 
-    // 团长领取自己团队的任务免审批，直接通过
+    // 已加入团队的会员领取本团队任务免审批，直接通过
     let claimStatus = ClaimStatus.PENDING_APPROVAL;
     if (task.teamId) {
-      const isLeader = await this.teamMemberRepository.findOne({
-        where: { teamId: task.teamId, userId, role: TeamMemberRole.LEADER, status: MemberStatus.APPROVED },
+      const isMember = await this.teamMemberRepository.findOne({
+        where: { teamId: task.teamId, userId, status: MemberStatus.APPROVED },
       });
-      if (isLeader) {
+      if (isMember) {
         claimStatus = ClaimStatus.CLAIMED;
       }
     }

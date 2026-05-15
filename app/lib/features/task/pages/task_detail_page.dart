@@ -56,15 +56,32 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
     } catch (e) {
       if (mounted) {
         final msg = e.toString();
+        // 解析服务器返回的具体错误信息
+        String userMsg = '领取失败，请稍后重试';
         if (msg.contains('已申请') || msg.contains('已领取')) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('您已领取过该任务，可在"我的任务"中查看'), backgroundColor: AppColors.orange),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('领取失败，请稍后重试'), backgroundColor: AppColors.error),
-          );
+          userMsg = '您已领取过该任务，可在"我的任务"中查看';
+        } else if (msg.contains('不可申请')) {
+          userMsg = '任务当前不可申请';
+        } else if (msg.contains('截止时间')) {
+          userMsg = '任务已过截止时间';
+        } else if (msg.contains('质量分不足')) {
+          userMsg = '质量分不足，无法申请此任务';
+        } else if (msg.contains('仅团队成员可领取')) {
+          userMsg = '仅团队成员可领取此任务';
+        } else if (msg.contains('已被领完')) {
+          userMsg = '任务已被领完';
+        } else if (msg.contains('封禁')) {
+          userMsg = '账号已被封禁，无法申请任务';
+        } else if (msg.contains('Exception') || msg.contains('Error')) {
+          // 提取服务器返回的异常消息
+          final start = msg.indexOf(': ');
+          if (start > 0) {
+            userMsg = msg.substring(start + 2);
+          }
         }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userMsg), backgroundColor: AppColors.error),
+        );
       }
     } finally {
       if (mounted) setState(() => _isApplying = false);

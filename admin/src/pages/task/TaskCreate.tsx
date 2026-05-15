@@ -165,8 +165,7 @@ export default function TaskForm() {
     }
   };
 
-  if (fetching) return <Spin style={{ display: 'block', margin: '100px auto' }} />;
-
+  // ── 这些 hooks 必须在 early return 之前，保证每次渲染调用次数一致 ──
   const watchedProjectId = Form.useWatch('projectId', form);
   const watchedType = Form.useWatch('type', form);
   const taskType: string = watchedType || 'audio';
@@ -181,6 +180,8 @@ export default function TaskForm() {
       }
     }
   }, [watchedProjectId, projects]);
+
+  if (fetching) return <Spin style={{ display: 'block', margin: '100px auto' }} />;
 
   return (
     <Row gutter={24}>

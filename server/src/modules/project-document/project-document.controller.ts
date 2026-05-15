@@ -6,9 +6,12 @@ import {
   Param,
   Body,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { ProjectDocumentService } from './project-document.service';
 import { CreateProjectDocumentDto, BatchCreateProjectDocumentDto } from './dto';
 import { Roles } from '../../common/decorators';
@@ -31,11 +34,25 @@ export class ProjectDocumentController {
     return this.docService.findOne(projectId, docId);
   }
 
+  @Post('upload')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: '上传 txt/word 文档文件' })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  async uploadFile(
+    @Param('projectId') projectId: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.docService.createFromFile(projectId, file);
+  }
+
   @Post()
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
   @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
-  @ApiOperation({ summary: '上传单个文档' })
+  @ApiOperation({ summary: '上传单个文档（JSON）' })
   async create(@Param('projectId') projectId: string, @Body() dto: CreateProjectDocumentDto) {
     return this.docService.create(projectId, dto);
   }
