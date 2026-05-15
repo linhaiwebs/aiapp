@@ -32,8 +32,8 @@ export default function ProjectList() {
       const res: any = await projectApi.list({ page, pageSize: 20 });
       setData(res.items || []);
       setTotal(res.total || 0);
-    } catch {
-      message.error('加载项目失败');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || '加载项目失败');
     } finally {
       setLoading(false);
     }
@@ -48,8 +48,8 @@ export default function ProjectList() {
           await projectApi.remove(id);
           message.success('删除成功');
           loadProjects();
-        } catch {
-          message.error('删除失败');
+        } catch (err: any) {
+          message.error(err?.response?.data?.message || '删除失败');
         }
       },
     });
@@ -60,8 +60,8 @@ export default function ProjectList() {
     try {
       const res: any = await projectDocumentApi.list(projectId);
       setDocuments(Array.isArray(res) ? res : []);
-    } catch {
-      message.error('加载文档列表失败');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || '加载文档列表失败');
     } finally {
       setDocsLoading(false);
     }
@@ -79,21 +79,22 @@ export default function ProjectList() {
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    let successCount = 0;
+    let failCount = 0;
     try {
-      const documents: { title: string; content: string; fileName: string }[] = [];
       for (const file of Array.from(files)) {
-        const content = await file.text();
-        documents.push({
-          title: file.name.replace(/\.[^.]+$/i, ''),
-          content,
-          fileName: file.name,
-        });
+        try {
+          await projectDocumentApi.upload(docProjectId, file);
+          successCount++;
+        } catch (err: any) {
+          failCount++;
+          const msg = err?.response?.data?.message || err?.message || '未知错误';
+          console.error(`上传 ${file.name} 失败:`, msg);
+        }
       }
-      await projectDocumentApi.batchCreate(docProjectId, { documents });
-      message.success(`成功上传 ${documents.length} 个文档`);
-      loadDocuments(docProjectId);
-    } catch {
-      message.error('上传失败');
+      if (successCount > 0) message.success(`成功上传 ${successCount} 个文档`);
+      if (failCount > 0) message.warning(`${failCount} 个文件上传失败，请检查文件格式`);
+      if (successCount > 0) loadDocuments(docProjectId);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -105,8 +106,8 @@ export default function ProjectList() {
       await projectDocumentApi.remove(docProjectId, docId);
       message.success('删除成功');
       loadDocuments(docProjectId);
-    } catch {
-      message.error('删除失败');
+    } catch (err: any) {
+      message.error(err?.response?.data?.message || '删除失败');
     }
   };
 
@@ -124,7 +125,7 @@ export default function ProjectList() {
       loadDocuments(docProjectId);
     } catch (e: any) {
       if (e.errorFields) return; // form validation
-      message.error('保存失败');
+      message.error(e?.response?.data?.message || '保存失败');
     } finally {
       setSavingManual(false);
     }
@@ -232,7 +233,7 @@ export default function ProjectList() {
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept=".txt,.text,.csv,.json,.md,.xml,.yaml,.yml,.log,.srt,.vtt,.html,.htm,.sml"
+                      accept=".txt,.text,.csv,.json,.md,.xml,.yaml,.yml,.log,.srt,.vtt,.html,.htm,.sml,.docx,.doc,.odt,.rtf,.pdf"
                       multiple
                       style={{ display: 'none' }}
                       onChange={handleFileSelect}
@@ -243,7 +244,7 @@ export default function ProjectList() {
                       loading={uploading}
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      选择文件上传（支持多选，UTF-8编码）
+                      选择文件上传（支持多选：txt/docx/doc/rtf/odt/csv/json/md/html等）
                     </Button>
                   </div>
 

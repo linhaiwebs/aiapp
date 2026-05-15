@@ -1,4 +1,5 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateProjectDocumentDto {
@@ -18,5 +19,8 @@ export class CreateProjectDocumentDto {
 
 export class BatchCreateProjectDocumentDto {
   @ApiProperty({ description: '文档列表', type: [CreateProjectDocumentDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateProjectDocumentDto)
   documents: CreateProjectDocumentDto[];
 }

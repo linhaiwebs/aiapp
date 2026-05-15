@@ -132,5 +132,10 @@ export const projectDocumentApi = {
     api.post(`/projects/${projectId}/documents`, data),
   batchCreate: (projectId: string, data: { documents: { title: string; content: string; fileName?: string }[] }) =>
     api.post(`/projects/${projectId}/documents/batch`, data),
+  upload: (projectId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post(`/projects/${projectId}/documents/upload`, formData);
+  },
   remove: (projectId: string, docId: string) => api.delete(`/projects/${projectId}/documents/${docId}`),
 };

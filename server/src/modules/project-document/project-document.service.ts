@@ -25,7 +25,9 @@ export class ProjectDocumentService {
 
     let content: string;
 
-    if (ext === 'txt') {
+    const textFormats = ['txt', 'text', 'csv', 'json', 'md', 'xml', 'yaml', 'yml', 'log', 'srt', 'vtt', 'html', 'htm', 'sml'];
+
+    if (textFormats.includes(ext!)) {
       // Plain text file - read as UTF-8
       content = file.buffer.toString('utf-8');
     } else if (ext === 'docx') {
@@ -35,20 +37,19 @@ export class ProjectDocumentService {
         const result = await mammoth.extractRawText({ buffer: file.buffer });
         content = result.value;
       } catch {
-        // Fallback: strip binary and try to extract readable text
         content = file.buffer.toString('utf-8').replace(/[^\x20-\x7E一-鿿　-〿＀-￯\n\r]/g, '');
         if (!content.trim()) {
           throw new BadRequestException('无法解析 Word 文档内容，请上传 .txt 格式的文件');
         }
       }
-    } else if (ext === 'doc') {
-      // Older .doc format - try basic extraction
+    } else if (ext === 'doc' || ext === 'rtf' || ext === 'odt') {
+      // Legacy/rich text formats — best-effort text extraction
       content = file.buffer.toString('utf-8').replace(/[^\x20-\x7E一-鿿　-〿＀-￯\n\r]/g, '');
       if (!content.trim()) {
-        throw new BadRequestException('不支持旧版 .doc 格式，请另存为 .docx 或 .txt 后重试');
+        throw new BadRequestException(`无法解析 .${ext} 格式，请另存为 .docx 或 .txt 后重试`);
       }
     } else {
-      throw new BadRequestException(`不支持的文件格式: .${ext}，请上传 .txt 或 .docx 文件`);
+      throw new BadRequestException(`不支持的文件格式: .${ext}，请上传 .txt、.docx 等常见文档格式`);
     }
 
     const doc = this.docRepository.create({
