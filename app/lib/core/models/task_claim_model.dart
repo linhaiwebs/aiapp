@@ -32,6 +32,7 @@ class TaskClaimModel {
   final int rejectedCount;
   final String? taskType; // from joined task: audio, text, image, video
   final String? taskTitle; // from joined task
+  final String? taskDescription; // from joined task
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -49,6 +50,7 @@ class TaskClaimModel {
     this.rejectedCount = 0,
     this.taskType,
     this.taskTitle,
+    this.taskDescription,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -75,6 +77,7 @@ class TaskClaimModel {
         rejectedCount: _toInt(json['rejectedCount']),
         taskType: json['task']?['type'] as String?,
         taskTitle: json['task']?['title'] as String?,
+        taskDescription: json['task']?['description'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
       );

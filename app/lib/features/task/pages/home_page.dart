@@ -5,10 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/models/task_model.dart';
 import '../../../core/models/task_claim_model.dart';
-import '../../../core/models/team_model.dart';
 import '../../../core/models/user_model.dart';
 import '../../../core/services/task_service.dart';
-import '../../../core/services/team_service.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../shared/widgets/skeleton.dart';
 
@@ -21,7 +19,6 @@ class HomePage extends ConsumerStatefulWidget {
 
 class _HomePageState extends ConsumerState<HomePage> {
   List<TaskClaimModel> _claims = [];
-  List<TeamModel> _myTeams = [];
   UserModel? _currentUser;
   bool _isLoading = true;
 
@@ -36,38 +33,19 @@ class _HomePageState extends ConsumerState<HomePage> {
     try {
       final results = await Future.wait([
         ref.read(taskServiceProvider).getMyClaims(),
-        ref.read(teamServiceProvider).getMyTeams(),
         ref.read(authServiceProvider).getMe(),
       ]);
       if (!mounted) return;
       final claims = results[0] as List<TaskClaimModel>;
-      final teams = results[1] as List<TeamModel>;
-      final user = results[2] as UserModel;
+      final user = results[1] as UserModel;
       setState(() {
         _claims = claims;
-        _myTeams = teams;
         _currentUser = user;
         _isLoading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  /// Whether the current user is a team leader (system-level or team-level).
-  bool get _isTeamLeader {
-    if (_currentUser == null) return false;
-    if (_currentUser!.role == UserRole.leader || _currentUser!.role == UserRole.superAdmin) return true;
-    for (final team in _myTeams) {
-      for (final member in team.members) {
-        if (member.userId == _currentUser!.id &&
-            member.role == 'leader' &&
-            member.status == 'approved') {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   List<TaskClaimModel> get _approvedClaims =>
@@ -90,8 +68,6 @@ class _HomePageState extends ConsumerState<HomePage> {
             SliverToBoxAdapter(child: _buildHeader()),
             SliverToBoxAdapter(child: _buildHeroBanner()),
             SliverToBoxAdapter(child: _buildQuickNavCards()),
-            if (_isTeamLeader)
-              SliverToBoxAdapter(child: _buildTaskCreateEntryCard()),
             if (_pendingClaims.isNotEmpty) SliverToBoxAdapter(child: _buildPendingNotice()),
             if (_isLoading)
               SliverPadding(
@@ -586,37 +562,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     ClaimStatus.rejected => '已驳回',
   };
 
-  Widget _buildTaskCreateEntryCard() {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
-      child: GestureDetector(
-        onTap: () => context.push('/tasks/create'),
-        child: Container(
-          padding: EdgeInsets.all(AppSpacing.dataGutter.w),
-          decoration: BoxDecoration(
-            color: AppColors.secondary.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(AppRadius.card.r),
-            border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
-          ),
-          child: Row(children: [
-            Container(
-              width: 40.w, height: 40.w,
-              decoration: BoxDecoration(
-                color: AppColors.secondary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Icon(Icons.add_task, size: 22.sp, color: AppColors.secondary),
-            ),
-            SizedBox(width: AppSpacing.sm.w),
-            Expanded(
-              child: Text('创建任务', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-            ),
-            Icon(Icons.chevron_right, size: 20.sp, color: AppColors.outline),
-          ]),
-        ),
-      ),
-    );
-  }
 }
 
 class _QuickNavItem {

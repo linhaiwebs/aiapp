@@ -32,6 +32,9 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   final List<_CollectedFile> _collectedFiles = [];
   bool _isSubmitting = false;
   bool _isUploading = false;
+  double _uploadProgress = 0;
+  String _uploadingFileName = '';
+  bool _showFullDesc = false;
 
   final AudioRecorder _recorder = AudioRecorder();
 
@@ -148,10 +151,17 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
 
   // ─── File Upload ──────────────────────────────────────────────
 
-  Future<void> _pickAndUploadAudio() async {
+  Future<void> _pickAndUploadFiles() async {
+    final taskType = _claim?.taskType ?? 'audio';
+    final pickType = switch (taskType) {
+      'image' => FileType.image,
+      'video' => FileType.video,
+      'audio' => FileType.audio,
+      _ => FileType.any,
+    };
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
+        type: pickType,
         allowMultiple: true,
       );
       if (result != null && result.files.isNotEmpty) {
@@ -171,39 +181,105 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   }
 
   Future<void> _uploadFile(String filePath, {String source = '', Duration? duration}) async {
-    setState(() => _isUploading = true);
+    final fileName = source.isNotEmpty ? source : filePath.split('/').last;
+    setState(() {
+      _isUploading = true;
+      _uploadProgress = 0;
+      _uploadingFileName = fileName;
+    });
+    // Show progress dialog overlay
+    _showProgressDialog(fileName);
     try {
       final result = await ref.read(fileServiceProvider).simpleUpload(
         filePath,
         taskId: _claim?.taskId,
-        taskType: 'audio',
+        taskType: _claim?.taskType ?? 'audio',
+        onProgress: (sent, total) {
+          if (mounted && total > 0) {
+            setState(() => _uploadProgress = sent / total);
+          }
+        },
       );
       final fileId = result['id'] as String;
       final file = File(filePath);
       final size = await file.length();
+      // Dismiss progress dialog
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
       if (mounted) {
         setState(() {
           _collectedFiles.add(_CollectedFile(
             id: fileId,
-            name: source.isNotEmpty ? source : filePath.split('/').last,
+            name: fileName,
             size: size,
             duration: duration,
             type: duration != null ? _FileType.recorded : _FileType.uploaded,
           ));
           _isUploading = false;
+          _uploadProgress = 0;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$source 上传成功'), backgroundColor: AppColors.secondary),
+          SnackBar(content: Text('$fileName 上传成功'), backgroundColor: AppColors.secondary),
         );
       }
     } catch (e) {
+      // Dismiss progress dialog
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
       if (mounted) {
-        setState(() => _isUploading = false);
+        setState(() {
+          _isUploading = false;
+          _uploadProgress = 0;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('上传失败: $e'), backgroundColor: AppColors.error),
         );
       }
     }
+  }
+
+  void _showProgressDialog(String fileName) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppColors.surfaceContainerLowest,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cloud_upload_outlined, size: 40.sp, color: AppColors.primary),
+                SizedBox(height: 16.h),
+                Text('正在上传', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                SizedBox(height: 8.h),
+                Text(
+                  fileName,
+                  style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 16.h),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4.r),
+                  child: LinearProgressIndicator(
+                    value: _uploadProgress > 0 ? _uploadProgress : null,
+                    minHeight: 6.h,
+                    backgroundColor: AppColors.outlineVariant,
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                ),
+                SizedBox(height: 8.h),
+                Text(
+                  _uploadProgress > 0 ? '${(_uploadProgress * 100).toInt()}%' : '准备中...',
+                  style: TextStyle(fontSize: 12.sp, color: AppColors.primary),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _removeFile(int index) {
@@ -309,6 +385,8 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
               child: Column(
                 children: [
                   _buildStatsBar(),
+                  if (_claim?.taskDescription != null && _claim!.taskDescription!.isNotEmpty)
+                    _buildDescriptionCard(),
                   Expanded(
                     child: _collectedFiles.isEmpty
                         ? Center(
@@ -403,6 +481,45 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
     );
   }
 
+  Widget _buildDescriptionCard() {
+    return Container(
+      margin: EdgeInsets.fromLTRB(16.w, 0, 16.w, 8.h),
+      padding: EdgeInsets.all(12.w),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.info_outline, size: 14.sp, color: AppColors.primary),
+            SizedBox(width: 6.w),
+            Text('任务描述', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => setState(() => _showFullDesc = !_showFullDesc),
+              child: Text(_showFullDesc ? '收起' : '展开', style: TextStyle(fontSize: 11.sp, color: AppColors.outline)),
+            ),
+          ]),
+          SizedBox(height: 6.h),
+          AnimatedCrossFade(
+            firstChild: Text(
+              _claim!.taskDescription!,
+              style: TextStyle(fontSize: 13.sp, color: AppColors.onSurface, height: 1.5),
+              maxLines: _showFullDesc ? 999 : 2,
+              overflow: _showFullDesc ? null : TextOverflow.ellipsis,
+            ),
+            secondChild: const SizedBox.shrink(),
+            crossFadeState: _showFullDesc ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildRecordSection() {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -430,7 +547,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         SizedBox(height: 16.h),
         if (!_isRecording)
           GestureDetector(
-            onTap: _pickAndUploadAudio,
+            onTap: _pickAndUploadFiles,
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 10.h),
               decoration: BoxDecoration(
@@ -479,7 +596,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
           if (!_isRecording && !_isUploading) ...[
             SizedBox(width: 16.w),
             GestureDetector(
-              onTap: _pickAndUploadAudio,
+              onTap: _pickAndUploadFiles,
               child: Container(
                 padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
                 decoration: BoxDecoration(
@@ -687,16 +804,42 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
           if (_isUploading)
             Padding(
               padding: EdgeInsets.only(bottom: 8.h),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
                 children: [
-                  SizedBox(
-                    width: 14.w,
-                    height: 14.w,
-                    child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 14.w,
+                        height: 14.w,
+                        child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                      ),
+                      SizedBox(width: 8.w),
+                      Expanded(
+                        child: Text(
+                          '上传中: $_uploadingFileName',
+                          style: TextStyle(fontSize: 11.sp, color: AppColors.primary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      SizedBox(width: 8.w),
+                      Text(
+                        '${(_uploadProgress * 100).toInt()}%',
+                        style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.w600, color: AppColors.primary),
+                      ),
+                    ],
                   ),
-                  SizedBox(width: 8.w),
-                  Text('文件上传中...', style: TextStyle(fontSize: 12.sp, color: AppColors.primary)),
+                  SizedBox(height: 6.h),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(2.r),
+                    child: LinearProgressIndicator(
+                      value: _uploadProgress,
+                      minHeight: 4.h,
+                      backgroundColor: AppColors.outlineVariant,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    ),
+                  ),
                 ],
               ),
             ),

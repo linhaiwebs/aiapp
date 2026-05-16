@@ -9,7 +9,8 @@ import '../../../core/services/task_service.dart';
 import '../../../core/services/project_service.dart';
 
 class TaskCreatePage extends ConsumerStatefulWidget {
-  const TaskCreatePage({super.key});
+  final String? teamId;
+  const TaskCreatePage({super.key, this.teamId});
 
   @override
   ConsumerState<TaskCreatePage> createState() => _TaskCreatePageState();
@@ -53,8 +54,15 @@ class _TaskCreatePageState extends ConsumerState<TaskCreatePage> {
       final projects = await ref.read(projectServiceProvider).findAll();
       if (mounted) {
         setState(() {
-          _projects = projects.where((p) => p.isActive).toList();
+          _projects = projects.where((p) {
+            if (!p.isActive) return false;
+            if (widget.teamId != null) return p.teamId == widget.teamId;
+            return true;
+          }).toList();
           _loadingProjects = false;
+          if (widget.teamId != null && _projects.isNotEmpty && _selectedProjectId == null) {
+            _selectedProjectId = _projects.first.id;
+          }
         });
       }
     } catch (_) {
@@ -102,6 +110,9 @@ class _TaskCreatePageState extends ConsumerState<TaskCreatePage> {
       }
       if (_selectedProjectId != null) {
         data['projectId'] = _selectedProjectId;
+      }
+      if (widget.teamId != null) {
+        data['teamId'] = widget.teamId;
       }
       if (_deadline != null) {
         data['deadline'] = _deadline!.toIso8601String();

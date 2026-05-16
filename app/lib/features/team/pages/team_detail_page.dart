@@ -177,11 +177,32 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
 
   Widget _buildActionButtons() {
     if (_isLeader) {
-      return ElevatedButton.icon(
-        onPressed: _showAddMemberSheet,
-        icon: Icon(Icons.person_add, size: 18.sp),
-        label: Text('邀请成员', style: TextStyle(fontSize: 14.sp)),
-        style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 48.h)),
+      return Column(
+        children: [
+          Row(children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _showAddMemberSheet,
+                icon: Icon(Icons.person_add, size: 18.sp),
+                label: Text('邀请成员', style: TextStyle(fontSize: 14.sp)),
+                style: ElevatedButton.styleFrom(minimumSize: Size(double.infinity, 48.h)),
+              ),
+            ),
+            SizedBox(width: AppSpacing.sm.w),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => context.push('/tasks/create?teamId=${widget.teamId}'),
+                icon: Icon(Icons.add_task, size: 18.sp),
+                label: Text('创建任务', style: TextStyle(fontSize: 14.sp)),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: Size(double.infinity, 48.h),
+                  backgroundColor: AppColors.secondary,
+                  foregroundColor: AppColors.onSecondary,
+                ),
+              ),
+            ),
+          ]),
+        ],
       );
     }
 

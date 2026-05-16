@@ -49,13 +49,16 @@ class FileService {
     String filePath, {
     String? taskId,
     String? taskType,
+    void Function(int sent, int total)? onProgress,
   }) async {
     final formData = FormData.fromMap({
       'file': await MultipartFile.fromFile(filePath),
       if (taskId != null) 'taskId': taskId,
       if (taskType != null) 'taskType': taskType,
     });
-    final res = await _client.dio.post('/files/upload', data: formData);
+    final res = await _client.dio.post('/files/upload', data: formData,
+      onSendProgress: onProgress,
+    );
     return res.data;
   }
 

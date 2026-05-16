@@ -135,7 +135,9 @@ export const projectDocumentApi = {
   upload: (projectId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post(`/projects/${projectId}/documents/upload`, formData);
+    return api.post(`/projects/${projectId}/documents/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   },
   remove: (projectId: string, docId: string) => api.delete(`/projects/${projectId}/documents/${docId}`),
 };

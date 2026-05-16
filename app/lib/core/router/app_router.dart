@@ -70,7 +70,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(path: '/tasks/:id', pageBuilder: (context, state) => _slidePage(TaskDetailPage(taskId: state.pathParameters['id']!), state)),
-      GoRoute(path: '/tasks/create', pageBuilder: (context, state) => _slidePage(const TaskCreatePage(), state)),
+      GoRoute(path: '/tasks/create', pageBuilder: (context, state) => _slidePage(TaskCreatePage(teamId: state.uri.queryParameters['teamId']), state)),
       GoRoute(path: '/my-tasks', pageBuilder: (context, state) => _slidePage(const MyTasksPage(), state)),
       GoRoute(path: '/teams/:id', pageBuilder: (context, state) => _slidePage(TeamDetailPage(teamId: state.pathParameters['id']!), state)),
       GoRoute(path: '/collection/:claimId', pageBuilder: (context, state) => _slidePage(CollectionWorkbenchPage(claimId: state.pathParameters['claimId']!), state)),
