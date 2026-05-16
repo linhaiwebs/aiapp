@@ -24,12 +24,14 @@ export class TeamService {
     const team = this.teamRepository.create(dto);
     const saved = await this.teamRepository.save(team);
 
-    // 自动将创建者添加为团长（已审批）
-    if (userId) {
-      const user = await this.userRepository.findOne({ where: { id: userId } });
+    // 确定团长：优先 dto.leaderId（管理员替团长创建），否则 userId（团长自己创建）
+    const leaderId = dto.leaderId || userId;
+
+    if (leaderId) {
+      const user = await this.userRepository.findOne({ where: { id: leaderId } });
       const member = this.memberRepository.create({
         teamId: saved.id,
-        userId,
+        userId: leaderId,
         userName: user?.nickname || user?.phone || dto.leaderName || undefined,
         phone: user?.phone || undefined,
         role: TeamMemberRole.LEADER,
