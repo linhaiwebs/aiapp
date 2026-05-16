@@ -112,8 +112,7 @@ export class TextCollectionService {
     const { taskId, status, assignedUserId, page = 1, pageSize = 20 } = filter;
 
     const queryBuilder = this.textRepository
-      .createQueryBuilder('text')
-      .leftJoinAndSelect('text.task', 'task');
+      .createQueryBuilder('text');
 
     if (taskId) queryBuilder.andWhere('text.taskId = :taskId', { taskId });
     if (status) queryBuilder.andWhere('text.status = :status', { status });
@@ -295,13 +294,29 @@ export class TextCollectionService {
   }
 
   async getTextStats(taskId: string) {
-    const total = await this.textRepository.count({ where: { taskId } });
-    const pending = await this.textRepository.count({ where: { taskId, status: TextStatus.PENDING } });
-    const assigned = await this.textRepository.count({ where: { taskId, status: TextStatus.ASSIGNED } });
-    const collecting = await this.textRepository.count({ where: { taskId, status: TextStatus.COLLECTING } });
-    const completed = await this.textRepository.count({ where: { taskId, status: TextStatus.COMPLETED } });
-    const qcFailed = await this.textRepository.count({ where: { taskId, status: TextStatus.QC_FAILED } });
+    const result = await this.textRepository
+      .createQueryBuilder('text')
+      .select('text.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('text.taskId = :taskId', { taskId })
+      .groupBy('text.status')
+      .getRawMany<{ status: string; count: string }>();
 
-    return { total, pending, assigned, collecting, completed, qcFailed };
+    const map: Record<string, number> = {};
+    let total = 0;
+    for (const row of result) {
+      const count = parseInt(row.count, 10);
+      map[row.status] = count;
+      total += count;
+    }
+
+    return {
+      total,
+      pending: map[TextStatus.PENDING] || 0,
+      assigned: map[TextStatus.ASSIGNED] || 0,
+      collecting: map[TextStatus.COLLECTING] || 0,
+      completed: map[TextStatus.COMPLETED] || 0,
+      qcFailed: map[TextStatus.QC_FAILED] || 0,
+    };
   }
 }

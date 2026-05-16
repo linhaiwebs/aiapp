@@ -23,6 +23,7 @@ export enum TextStatus {
 }
 
 @Entity('text_collections')
+@Index(['taskId', 'status'])
 export class TextCollection {
   @PrimaryGeneratedColumn('uuid')
   id: string;

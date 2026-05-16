@@ -2,11 +2,17 @@ import '../models/text_collection_model.dart';
 import '../network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+class PaginatedTexts {
+  final List<TextCollectionModel> items;
+  final int total;
+  const PaginatedTexts({required this.items, required this.total});
+}
+
 class TextCollectionService {
   final DioClient _client;
   TextCollectionService(this._client);
 
-  Future<List<TextCollectionModel>> findAll({
+  Future<PaginatedTexts> findAll({
     String? taskId,
     String? status,
     int page = 1,
@@ -18,8 +24,11 @@ class TextCollectionService {
       'page': page,
       'pageSize': pageSize,
     });
-    final list = res.data['items'] ?? res.data as List;
-    return (list as List).map((e) => TextCollectionModel.fromJson(e as Map<String, dynamic>)).toList();
+    final data = res.data as Map<String, dynamic>;
+    final list = data['items'] as List? ?? [];
+    final items = list.map((e) => TextCollectionModel.fromJson(e as Map<String, dynamic>)).toList();
+    final total = data['total'] as int? ?? items.length;
+    return PaginatedTexts(items: items, total: total);
   }
 
   Future<TextCollectionModel> findOne(String id) async {

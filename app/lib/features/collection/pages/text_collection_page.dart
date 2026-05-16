@@ -17,32 +17,79 @@ class TextCollectionPage extends ConsumerStatefulWidget {
 }
 
 class _TextCollectionPageState extends ConsumerState<TextCollectionPage> {
-  List<TextCollectionModel> _texts = [];
+  final List<TextCollectionModel> _texts = [];
+  final ScrollController _scrollController = ScrollController();
   Map<String, dynamic>? _stats;
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
+  int _page = 1;
+  static const int _pageSize = 20;
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 &&
+        !_isLoadingMore &&
+        _hasMore) {
+      _loadMore();
+    }
   }
 
   Future<void> _loadData() async {
     try {
-      final [texts, stats] = await Future.wait([
-        ref.read(textCollectionServiceProvider).findAll(taskId: widget.taskId),
+      final results = await Future.wait([
+        ref.read(textCollectionServiceProvider).findAll(taskId: widget.taskId, page: 1, pageSize: _pageSize),
         ref.read(textCollectionServiceProvider).getStats(widget.taskId),
       ]);
+      final paginated = results[0] as PaginatedTexts;
+      final stats = results[1] as Map<String, dynamic>;
       if (mounted) {
         setState(() {
-          _texts = texts as List<TextCollectionModel>;
-          _stats = stats as Map<String, dynamic>;
+          _texts.clear();
+          _texts.addAll(paginated.items);
+          _hasMore = _texts.length < paginated.total;
+          _page = 1;
+          _stats = stats;
           _isLoading = false;
         });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    setState(() => _isLoadingMore = true);
+    try {
+      final paginated = await ref.read(textCollectionServiceProvider).findAll(
+        taskId: widget.taskId,
+        page: _page + 1,
+        pageSize: _pageSize,
+      );
+      if (mounted) {
+        setState(() {
+          _texts.addAll(paginated.items);
+          _page++;
+          _hasMore = _texts.length < paginated.total;
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingMore = false);
     }
   }
 
@@ -187,13 +234,46 @@ class _TextCollectionPageState extends ConsumerState<TextCollectionPage> {
                           ),
                         )
                       : ListView.builder(
+                          controller: _scrollController,
                           padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                          itemCount: _texts.length,
-                          itemBuilder: (context, index) => _buildTextCard(_texts[index]),
+                          itemCount: _texts.length + (_hasMore ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (index == _texts.length) {
+                              return _buildLoadMoreIndicator();
+                            }
+                            return _buildTextCard(_texts[index]);
+                          },
                         ),
                 ),
                 _buildSubmitBar(),
               ],
+            ),
+    );
+  }
+
+  Widget _buildLoadMoreIndicator() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 16.h),
+      alignment: Alignment.center,
+      child: _isLoadingMore
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 16.w,
+                  height: 16.w,
+                  child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                ),
+                SizedBox(width: 8.w),
+                Text('加载更多...', style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant)),
+              ],
+            )
+          : GestureDetector(
+              onTap: _loadMore,
+              child: Text(
+                '加载更多',
+                style: TextStyle(fontSize: 12.sp, color: AppColors.primary),
+              ),
             ),
     );
   }
@@ -215,14 +295,27 @@ class _TextCollectionPageState extends ConsumerState<TextCollectionPage> {
         borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.outlineVariant),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildStatItem('总计', total, AppColors.primary),
-          _buildStatDivider(),
-          _buildStatItem('剩余', remaining, AppColors.outline),
-          _buildStatDivider(),
-          _buildStatItem('已完成', completed, AppColors.secondary),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem('总计', total, AppColors.primary),
+              _buildStatDivider(),
+              _buildStatItem('剩余', remaining, AppColors.outline),
+              _buildStatDivider(),
+              _buildStatItem('已完成', completed, AppColors.secondary),
+            ],
+          ),
+          if (total > _texts.length)
+            Padding(
+              padding: EdgeInsets.only(top: 6.h),
+              child: Text(
+                '已加载 ${_texts.length} / $total 条',
+                style: TextStyle(fontSize: 10.sp, color: AppColors.outline),
+              ),
+            ),
         ],
       ),
     );
