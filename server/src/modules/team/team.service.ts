@@ -89,10 +89,10 @@ export class TeamService {
     });
     if (!team) throw new NotFoundException('团队不存在');
 
-    // 成员身份校验（超级管理员跳过）
+    // 成员身份校验（超级管理员跳过，待审批成员也可查看）
     if (userId && userRole !== 'super_admin') {
       const isMember = team.members?.some(
-        (m) => m.userId === userId && m.status === MemberStatus.APPROVED,
+        (m) => m.userId === userId && m.status !== MemberStatus.REJECTED,
       );
       if (!isMember) {
         throw new ForbiddenException('您不是该团队的成员');
@@ -156,12 +156,14 @@ export class TeamService {
   }
 
   async getMembers(teamId: string, userId?: string, userRole?: string) {
-    // 非成员不能查看成员列表（超级管理员跳过）
+    // 非成员不能查看成员列表（超级管理员跳过；已通过和待审批成员均可查看）
     if (userId && userRole !== 'super_admin') {
-      const isMember = await this.memberRepository.findOne({
-        where: { teamId, userId, status: MemberStatus.APPROVED },
+      const membership = await this.memberRepository.findOne({
+        where: { teamId, userId },
       });
-      if (!isMember) throw new ForbiddenException('您不是该团队的成员');
+      if (!membership || membership.status === MemberStatus.REJECTED) {
+        throw new ForbiddenException('您不是该团队的成员');
+      }
     }
     return this.memberRepository.find({
       where: { teamId },

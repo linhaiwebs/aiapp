@@ -47,17 +47,27 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
         ref.read(teamServiceProvider).getMembers(widget.teamId),
         ref.read(authServiceProvider).getMe(),
       ]);
+      final team = results[0] as TeamModel;
+      final members = results[1] as List<TeamMemberModel>;
+      final currentUser = results[2] as UserModel;
+
+      // 从已加载的数据中判断是否为团长（而非依赖旧的 _isLeader getter）
+      final isLeader = members.any(
+        (m) => m.userId == currentUser.id && m.role == 'leader',
+      );
+      final isSuperAdmin = currentUser.role == UserRole.superAdmin;
+
       List<TeamMemberModel> pending = [];
-      if (_isLeader || _isSuperAdmin) {
+      if (isLeader || isSuperAdmin) {
         try {
           pending = await ref.read(teamServiceProvider).getPendingMembers(widget.teamId);
         } catch (_) {}
       }
       if (mounted) {
         setState(() {
-          _team = results[0] as TeamModel;
-          _members = results[1] as List<TeamMemberModel>;
-          _currentUser = results[2] as UserModel;
+          _team = team;
+          _members = members;
+          _currentUser = currentUser;
           _pendingMembers = pending;
           _isLoading = false;
         });
