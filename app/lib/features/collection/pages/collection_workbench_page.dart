@@ -52,9 +52,21 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
     try {
       final claims = await ref.read(taskServiceProvider).getMyClaims();
       final claim = claims.where((c) => c.id == widget.claimId).firstOrNull;
-      if (mounted) setState(() { _claim = claim; _isLoading = false; });
+      if (mounted) {
+        setState(() { _claim = claim; _isLoading = false; });
+        if (claim == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('任务领取记录未找到'), backgroundColor: AppColors.orange),
+          );
+        }
+      }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载失败: $e'), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 

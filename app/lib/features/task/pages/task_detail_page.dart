@@ -51,7 +51,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('申请已提交，等待审核员审批'), backgroundColor: AppColors.secondary),
         );
-        context.go('/my-tasks');
+        context.go('/home');
       }
     } catch (e) {
       if (mounted) {

@@ -90,10 +90,8 @@ class _HomePageState extends ConsumerState<HomePage> {
             SliverToBoxAdapter(child: _buildHeader()),
             SliverToBoxAdapter(child: _buildHeroBanner()),
             SliverToBoxAdapter(child: _buildQuickNavCards()),
-            if (_isTeamLeader) ...[
-              SliverToBoxAdapter(child: _buildAdminEntryCard()),
+            if (_isTeamLeader)
               SliverToBoxAdapter(child: _buildTaskCreateEntryCard()),
-            ],
             if (_pendingClaims.isNotEmpty) SliverToBoxAdapter(child: _buildPendingNotice()),
             if (_isLoading)
               SliverPadding(
@@ -587,38 +585,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     ClaimStatus.expired => '已过期',
     ClaimStatus.rejected => '已驳回',
   };
-
-  Widget _buildAdminEntryCard() {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(AppSpacing.layoutMargin.w, 0, AppSpacing.layoutMargin.w, AppSpacing.sm.h),
-      child: GestureDetector(
-        onTap: () => context.push('/admin/approvals'),
-        child: Container(
-          padding: EdgeInsets.all(AppSpacing.dataGutter.w),
-          decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(AppRadius.card.r),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-          ),
-          child: Row(children: [
-            Container(
-              width: 40.w, height: 40.w,
-              decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Icon(Icons.admin_panel_settings, size: 22.sp, color: AppColors.primary),
-            ),
-            SizedBox(width: AppSpacing.sm.w),
-            Expanded(
-              child: Text('审批管理', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-            ),
-            Icon(Icons.chevron_right, size: 20.sp, color: AppColors.outline),
-          ]),
-        ),
-      ),
-    );
-  }
 
   Widget _buildTaskCreateEntryCard() {
     return Padding(

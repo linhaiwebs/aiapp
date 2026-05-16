@@ -173,7 +173,7 @@ export class TeamService {
     });
   }
 
-  /** 通过口令加入团队（需团长审批） */
+  /** 通过口令加入团队（自动通过） */
   async joinByCode(userId: string, joinCode: string): Promise<TeamMember> {
     if (!joinCode || joinCode.trim().length === 0) {
       throw new BadRequestException('请输入口令');
@@ -189,9 +189,6 @@ export class TeamService {
       where: { teamId: team.id, userId },
     });
     if (existing) {
-      if (existing.status === MemberStatus.PENDING) {
-        throw new BadRequestException('已提交申请，等待审批中');
-      }
       throw new BadRequestException('您已在该团队中');
     }
 
@@ -203,7 +200,7 @@ export class TeamService {
       userName: user?.nickname || user?.phone || undefined,
       phone: user?.phone || undefined,
       role: TeamMemberRole.MEMBER,
-      status: MemberStatus.PENDING,
+      status: MemberStatus.APPROVED,
     });
     return this.memberRepository.save(member);
   }

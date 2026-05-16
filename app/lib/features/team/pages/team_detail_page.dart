@@ -18,26 +18,16 @@ class TeamDetailPage extends ConsumerStatefulWidget {
   ConsumerState<TeamDetailPage> createState() => _TeamDetailPageState();
 }
 
-class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
-    with SingleTickerProviderStateMixin {
+class _TeamDetailPageState extends ConsumerState<TeamDetailPage> {
   TeamModel? _team;
   List<TeamMemberModel> _members = [];
-  List<TeamMemberModel> _pendingMembers = [];
   UserModel? _currentUser;
   bool _isLoading = true;
-  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _loadData();
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -47,28 +37,11 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
         ref.read(teamServiceProvider).getMembers(widget.teamId),
         ref.read(authServiceProvider).getMe(),
       ]);
-      final team = results[0] as TeamModel;
-      final members = results[1] as List<TeamMemberModel>;
-      final currentUser = results[2] as UserModel;
-
-      // 从已加载的数据中判断是否为团长（而非依赖旧的 _isLeader getter）
-      final isLeader = members.any(
-        (m) => m.userId == currentUser.id && m.role == 'leader',
-      );
-      final isSuperAdmin = currentUser.role == UserRole.superAdmin;
-
-      List<TeamMemberModel> pending = [];
-      if (isLeader || isSuperAdmin) {
-        try {
-          pending = await ref.read(teamServiceProvider).getPendingMembers(widget.teamId);
-        } catch (_) {}
-      }
       if (mounted) {
         setState(() {
-          _team = team;
-          _members = members;
-          _currentUser = currentUser;
-          _pendingMembers = pending;
+          _team = results[0] as TeamModel;
+          _members = results[1] as List<TeamMemberModel>;
+          _currentUser = results[2] as UserModel;
           _isLoading = false;
         });
       }
@@ -79,8 +52,6 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
 
   bool get _isLeader => _currentUser != null && _team != null &&
       _members.any((m) => m.userId == _currentUser!.id && m.role == 'leader');
-  bool get _isSuperAdmin => _currentUser?.role == UserRole.superAdmin;
-  bool get _canManage => _isLeader || _isSuperAdmin;
   bool get _isMember => _currentUser != null &&
       _members.any((m) => m.userId == _currentUser!.id && m.isApproved);
 
@@ -99,33 +70,12 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
               icon: Icon(Icons.edit_outlined, size: 20.sp),
             ),
         ],
-        bottom: _canManage
-            ? TabBar(
-                controller: _tabController,
-                labelColor: AppColors.primary,
-                unselectedLabelColor: AppColors.outline,
-                indicatorColor: AppColors.primary,
-                labelStyle: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600),
-                tabs: [
-                  Tab(text: '成员 (${_members.where((m) => m.isApproved).length})'),
-                  Tab(text: '待审批 (${_pendingMembers.length})'),
-                ],
-              )
-            : null,
       ),
       body: _isLoading
           ? const Center(
               child: Padding(
                   padding: EdgeInsets.all(16), child: SkeletonTeamList(count: 6)))
-          : _canManage
-              ? TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildMemberList(),
-                    _buildPendingList(),
-                  ],
-                )
-              : _buildMemberList(),
+          : _buildMemberList(),
     );
   }
 
@@ -153,150 +103,7 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
     );
   }
 
-  Widget _buildPendingList() {
-    if (_pendingMembers.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check_circle_outline, size: 48.sp, color: AppColors.outline),
-            SizedBox(height: AppSpacing.sm.h),
-            Text('暂无待审批成员',
-                style: TextStyle(fontSize: 14.sp, color: AppColors.outline)),
-          ],
-        ),
-      );
-    }
-    return ListView(
-      padding: EdgeInsets.all(AppSpacing.md.w),
-      children: [
-        ..._pendingMembers.map(_buildPendingTile),
-        SizedBox(height: 100.h),
-      ],
-    );
-  }
-
-  Widget _buildPendingTile(TeamMemberModel member) {
-    return Container(
-      margin: EdgeInsets.only(bottom: AppSpacing.sm.h),
-      padding: EdgeInsets.all(AppSpacing.md.w),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.orange.withValues(alpha: 0.3)),
-      ),
-      child: Row(children: [
-        Container(
-          width: 40.w, height: 40.w,
-          decoration: BoxDecoration(
-            color: AppColors.orange.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
-          child: Center(
-            child: Text(member.displayLabel.substring(0, 1).toUpperCase(),
-                style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w700, color: AppColors.orange)),
-          ),
-        ),
-        SizedBox(width: AppSpacing.sm.w),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(member.displayLabel,
-                style: TextStyle(fontSize: 15.sp, fontWeight: FontWeight.w500, color: AppColors.onSurface)),
-            SizedBox(height: 2.h),
-            Text('申请加入于 ${_formatDate(member.createdAt)}',
-                style: TextStyle(fontSize: 12.sp, color: AppColors.outline)),
-          ]),
-        ),
-        SizedBox(
-          height: 32.h,
-          child: TextButton(
-            onPressed: () => _approveMember(member),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.symmetric(horizontal: 12.w),
-              backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-            ),
-            child: Text('通过', style: TextStyle(fontSize: 12.sp, color: AppColors.primary)),
-          ),
-        ),
-        SizedBox(width: AppSpacing.sm.w),
-        SizedBox(
-          height: 32.h,
-          child: TextButton(
-            onPressed: () => _rejectMember(member),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.symmetric(horizontal: 12.w),
-              backgroundColor: AppColors.error.withValues(alpha: 0.1),
-            ),
-            child: Text('驳回', style: TextStyle(fontSize: 12.sp, color: AppColors.error)),
-          ),
-        ),
-      ]),
-    );
-  }
-
-  Future<void> _approveMember(TeamMemberModel member) async {
-    try {
-      await ref.read(teamServiceProvider).approveMember(widget.teamId, member.id);
-      _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已通过 ${member.displayLabel} 的申请'), backgroundColor: AppColors.secondary),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('操作失败: $e'), backgroundColor: AppColors.error),
-        );
-      }
-    }
-  }
-
-  Future<void> _rejectMember(TeamMemberModel member) async {
-    final reasonController = TextEditingController();
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('驳回申请'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('确定驳回 ${member.displayLabel} 的申请吗？'),
-          SizedBox(height: AppSpacing.sm.h),
-          TextField(
-            controller: reasonController,
-            decoration: const InputDecoration(
-              labelText: '驳回原因（可选）',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
-          ),
-        ]),
-        actions: [
-          TextButton(onPressed: () => ctx.pop(), child: const Text('取消')),
-          TextButton(
-            onPressed: () => ctx.pop(reasonController.text),
-            child: const Text('驳回', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
-    );
-    if (result == null) return;
-    try {
-      await ref.read(teamServiceProvider).rejectMember(
-        widget.teamId, member.id,
-        reason: result.isEmpty ? null : result,
-      );
-      _loadData();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('操作失败: $e'), backgroundColor: AppColors.error),
-        );
-      }
-    }
-  }
-
   Widget _buildTeamInfoCard() {
-    // joinCode is already stripped by backend for non-leaders
     final hasJoinCode = _isLeader && _team?.joinCode != null && _team!.joinCode.isNotEmpty;
     return Container(
       padding: EdgeInsets.all(20.w),
@@ -391,7 +198,6 @@ class _TeamDetailPageState extends ConsumerState<TeamDetailPage>
       );
     }
 
-    // Non-members: no more direct join from detail page (use join-by-code from team list)
     return const SizedBox.shrink();
   }
 
