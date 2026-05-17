@@ -216,9 +216,9 @@ export class SubmissionService {
       where: { id: submission.claimId },
     });
     if (claim) {
-      claim.status = ClaimStatus.COMPLETED;
-      claim.completedAt = new Date();
       claim.passedCount += 1;
+      // Reset to IN_PROGRESS so user can continue submitting
+      claim.status = ClaimStatus.IN_PROGRESS;
       await this.claimRepository.save(claim);
 
       // Update task: increment completedQuantity
