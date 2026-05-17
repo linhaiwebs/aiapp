@@ -20,6 +20,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
   List<TaskModel> _tasks = [];
   String? _typeFilter;
   bool _isLoading = true;
+  String? _claimingTaskId;
 
   @override
   void initState() {
@@ -30,10 +31,59 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
   Future<void> _loadTasks() async {
     setState(() => _isLoading = true);
     try {
+      // Read initial type filter from route extra
+      final extra = GoRouterState.of(context).extra;
+      if (extra is Map && extra['type'] is String && _typeFilter == null) {
+        _typeFilter = extra['type'] as String;
+      }
       final tasks = await ref.read(taskServiceProvider).findAll(type: _typeFilter);
       if (mounted) setState(() { _tasks = tasks; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _claimTask(TaskModel task) async {
+    if (_claimingTaskId != null) return;
+    setState(() => _claimingTaskId = task.id);
+    try {
+      await ref.read(taskServiceProvider).claim(task.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('任务领取成功'), backgroundColor: AppColors.secondary),
+        );
+        context.go('/home');
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString();
+        String userMsg = '领取失败，请稍后重试';
+        if (msg.contains('已申请') || msg.contains('已领取')) {
+          userMsg = '您已领取过该任务，可在"我的任务"中查看';
+        } else if (msg.contains('不可申请')) {
+          userMsg = '任务当前不可申请';
+        } else if (msg.contains('截止时间')) {
+          userMsg = '任务已过截止时间';
+        } else if (msg.contains('质量分不足')) {
+          userMsg = '质量分不足，无法申请此任务';
+        } else if (msg.contains('仅团队成员可领取')) {
+          userMsg = '仅团队成员可领取此任务';
+        } else if (msg.contains('已被领完')) {
+          userMsg = '任务已被领完';
+        } else if (msg.contains('封禁')) {
+          userMsg = '账号已被封禁，无法申请任务';
+        } else if (msg.contains('Exception') || msg.contains('Error')) {
+          final start = msg.indexOf(': ');
+          if (start > 0) {
+            userMsg = msg.substring(start + 2);
+          }
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(userMsg), backgroundColor: AppColors.error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _claimingTaskId = null);
     }
   }
 
@@ -177,6 +227,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
     final progress = task.totalQuantity > 0
         ? (task.claimedQuantity / task.totalQuantity).clamp(0.0, 1.0)
         : 0.0;
+    final isClaiming = _claimingTaskId == task.id;
 
     return Container(
       margin: EdgeInsets.only(bottom: AppSpacing.listGap.h),
@@ -204,7 +255,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(AppRadius.md.r),
             child: InkWell(
-              onTap: () => context.push('/tasks/${task.id}'),
+              onTap: () => _claimTask(task),
               borderRadius: BorderRadius.circular(AppRadius.md.r),
               child: Padding(
                 padding: EdgeInsets.all(AppSpacing.cardPadding.w),
@@ -262,17 +313,25 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
                     ),
                     SizedBox(height: AppSpacing.sm.h),
                     GestureDetector(
-                      onTap: () => context.push('/tasks/${task.id}'),
+                      onTap: () => _claimTask(task),
                       child: Container(
                         width: double.infinity,
                         padding: EdgeInsets.symmetric(vertical: AppSpacing.sm.h),
                         decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.12),
+                          color: isClaiming
+                              ? AppColors.primary.withValues(alpha: 0.06)
+                              : AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(AppRadius.sm.r),
                           border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1),
                         ),
                         child: Center(
-                          child: Text('领取任务', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                          child: isClaiming
+                              ? SizedBox(
+                                  width: 20.w,
+                                  height: 20.w,
+                                  child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                )
+                              : Text('领取任务', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
                         ),
                       ),
                     ),

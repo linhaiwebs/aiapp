@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:logger/logger.dart';
-import '../network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../network/dio_client.dart';
 
 class UpdateInfo {
   final String version;
@@ -58,8 +61,8 @@ class UpdateService {
     }
   }
 
-  /// 显示更新弹窗
-  static Future<void> showUpdateDialog(BuildContext context, UpdateInfo info) {
+  /// 显示更新弹窗，"立即更新"会下载 APK 并触发安装
+  Future<void> showUpdateDialog(BuildContext context, UpdateInfo info) {
     return showDialog(
       context: context,
       barrierDismissible: !info.forceUpdate,
@@ -89,18 +92,39 @@ class UpdateService {
             if (!info.forceUpdate)
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('稍后')),
             ElevatedButton(
-              onPressed: () async {
-                final uri = Uri.parse(info.downloadUrl);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              },
+              onPressed: () => _downloadAndInstall(ctx, info.downloadUrl),
               child: const Text('立即更新'),
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _downloadAndInstall(BuildContext ctx, String downloadUrl) async {
+    Navigator.pop(ctx);
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final filePath = '${dir.path}/app_update.apk';
+      final file = File(filePath);
+      if (await file.exists()) await file.delete();
+
+      _logger.i('Downloading APK from $downloadUrl');
+      await _client.dio.download(
+        downloadUrl,
+        filePath,
+        deleteOnError: true,
+      );
+      _logger.i('APK downloaded to $filePath');
+
+      final result = await OpenFilex.open(filePath);
+      if (result.type != ResultType.done) {
+        _logger.w('Open APK failed: ${result.message}');
+        // Fallback: relaunch picker via system file manager
+      }
+    } catch (e) {
+      _logger.e('APK download/install failed: $e');
+    }
   }
 }
 

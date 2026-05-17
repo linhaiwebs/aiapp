@@ -14,7 +14,6 @@ import '../../features/collection/pages/collection_workbench_page.dart';
 import '../../features/collection/pages/text_collection_page.dart';
 import '../../features/task/pages/task_create_page.dart';
 import '../../features/profile/pages/profile_page.dart';
-import '../../features/profile/pages/data_export_page.dart';
 import '../../features/profile/pages/settings_page.dart';
 import '../../features/profile/pages/about_page.dart';
 import '../../features/profile/pages/account_security_page.dart';
@@ -74,7 +73,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/my-tasks', pageBuilder: (context, state) => _slidePage(const MyTasksPage(), state)),
       GoRoute(path: '/teams/:id', pageBuilder: (context, state) => _slidePage(TeamDetailPage(teamId: state.pathParameters['id']!), state)),
       GoRoute(path: '/collection/:claimId', pageBuilder: (context, state) => _slidePage(CollectionWorkbenchPage(claimId: state.pathParameters['claimId']!), state)),
-      GoRoute(path: '/data-export', pageBuilder: (context, state) => _slidePage(const DataExportPage(), state)),
       GoRoute(path: '/text-collection/:taskId', pageBuilder: (context, state) => _slidePage(TextCollectionPage(taskId: state.pathParameters['taskId']!), state)),
       GoRoute(path: '/settings', pageBuilder: (context, state) => _slidePage(const SettingsPage(), state)),
       GoRoute(path: '/about', pageBuilder: (context, state) => _slidePage(const AboutPage(), state)),

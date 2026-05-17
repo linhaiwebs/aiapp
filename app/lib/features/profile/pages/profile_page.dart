@@ -143,14 +143,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         icon: Icons.history_outlined,
                         title: '任务记录',
                         subtitle: '查看已领取和已完成的任务',
-                        onTap: () => context.push('/my-tasks'),
-                      ),
-                      _MenuItem(
-                        icon: Icons.bar_chart_outlined,
-                        title: '数据导出',
-                        subtitle: '导出任务和采集数据',
                         showDivider: false,
-                        onTap: () => context.push('/data-export'),
+                        onTap: () => context.push('/my-tasks'),
                       ),
                     ]),
 
@@ -281,7 +275,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 ),
               ),
               IconButton(
-                onPressed: () => context.push('/data-export'),
+                onPressed: () => context.push('/settings'),
                 icon: Icon(
                   Icons.settings_outlined,
                   size: 22.sp,

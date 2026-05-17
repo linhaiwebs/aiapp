@@ -43,13 +43,13 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
     // 强制更新 → 停留在 splash 并弹窗（不可跳过）
     if (updateInfo != null && updateInfo.forceUpdate) {
-      UpdateService.showUpdateDialog(context, updateInfo);
+      ref.read(updateServiceProvider).showUpdateDialog(context, updateInfo);
       return;
     }
 
     // 可选更新 → 先弹窗，用户操作后再跳转
     if (updateInfo != null && mounted) {
-      await UpdateService.showUpdateDialog(context, updateInfo);
+      await ref.read(updateServiceProvider).showUpdateDialog(context, updateInfo);
       if (!mounted) return;
     }
 
