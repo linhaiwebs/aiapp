@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:logger/logger.dart';
 import '../network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,6 +33,8 @@ class UpdateService {
   final DioClient _client;
   UpdateService(this._client);
 
+  final _logger = Logger();
+
   /// 检查是否有新版本，返回 UpdateInfo 或 null（无更新）
   Future<UpdateInfo?> checkUpdate() async {
     try {
@@ -40,12 +43,18 @@ class UpdateService {
       final local = await PackageInfo.fromPlatform();
       final localCode = int.tryParse(local.buildNumber) ?? 0;
 
+      _logger.i('Update check: local=$localCode, remote=${remote.versionCode}, '
+          'version=${remote.version}, force=${remote.forceUpdate}');
+
       if (remote.versionCode > localCode) {
+        _logger.i('Update available: v${remote.version} (code ${remote.versionCode})');
         return remote;
       }
+      _logger.i('Already up to date');
       return null;
-    } catch (_) {
-      return null; // 网络异常等静默处理
+    } catch (e) {
+      _logger.w('Update check failed: $e');
+      return null;
     }
   }
 

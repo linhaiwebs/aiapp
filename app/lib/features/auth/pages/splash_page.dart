@@ -41,12 +41,16 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
     if (!mounted) return;
 
-    // 强制更新 → 停留在 splash 并弹窗
+    // 强制更新 → 停留在 splash 并弹窗（不可跳过）
     if (updateInfo != null && updateInfo.forceUpdate) {
-      if (mounted) {
-        UpdateService.showUpdateDialog(context, updateInfo);
-      }
+      UpdateService.showUpdateDialog(context, updateInfo);
       return;
+    }
+
+    // 可选更新 → 先弹窗，用户操作后再跳转
+    if (updateInfo != null && mounted) {
+      await UpdateService.showUpdateDialog(context, updateInfo);
+      if (!mounted) return;
     }
 
     if (!shown) {
@@ -55,13 +59,6 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       context.go('/home');
     } else {
       context.go('/login');
-    }
-
-    // 可选更新 → 延迟弹窗
-    if (updateInfo != null && mounted) {
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) UpdateService.showUpdateDialog(context, updateInfo);
-      });
     }
   }
 
