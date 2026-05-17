@@ -100,9 +100,14 @@ export class FileService {
       throw new BadRequestException('文件不在上传状态');
     }
 
+    const totalChunks = file.uploadInfo?.totalChunks ?? 0;
+
     if (this.storageType === 'minio') {
-      const chunkName = `${file.storedName}.part.${chunkIndex}`;
-      await this.minioClient.putObject(this.bucket, chunkName, chunkBuffer);
+      // Single chunk → upload directly to final path, skip compose
+      const objectName = totalChunks <= 1
+        ? file.storedName
+        : `${file.storedName}.part.${chunkIndex}`;
+      await this.minioClient.putObject(this.bucket, objectName, chunkBuffer);
     } else {
       // Local: write chunk to temp file
       const chunksDir = path.join(this.localPath, '.chunks', fileId);
@@ -140,28 +145,33 @@ export class FileService {
 
     if (totalChunks > 0) {
       if (this.storageType === 'minio') {
-        // MinIO: compose all chunks into final object
-        const sources = [];
-        for (let i = 0; i < totalChunks; i++) {
-          sources.push({
-            Bucket: this.bucket,
-            Object: `${file.storedName}.part.${i}`,
-          });
-        }
-        await this.minioClient.composeObject(
-          { Bucket: this.bucket, Object: file.storedName },
-          sources,
-        ).catch((err: any) => {
-          console.error(`MinIO compose failed for ${file.storedName}:`, err.message);
-          throw new BadRequestException(`MinIO 文件合并失败: ${err.message}`);
-        });
-
-        // Clean up parts
-        for (let i = 0; i < totalChunks; i++) {
+        if (totalChunks > 1) {
+          // Multi-chunk: compose parts into final object
+          const sources = [];
+          for (let i = 0; i < totalChunks; i++) {
+            sources.push({
+              Bucket: this.bucket,
+              Object: `${file.storedName}.part.${i}`,
+            });
+          }
           try {
-            await this.minioClient.removeObject(this.bucket, `${file.storedName}.part.${i}`);
-          } catch { /* ignore cleanup errors */ }
+            await this.minioClient.composeObject(
+              { Bucket: this.bucket, Object: file.storedName },
+              sources,
+            );
+          } catch (err: any) {
+            console.error(`MinIO compose failed for ${file.storedName}:`, err.message);
+            throw new BadRequestException(`MinIO 文件合并失败: ${err.message}`);
+          }
+
+          // Clean up parts
+          for (let i = 0; i < totalChunks; i++) {
+            try {
+              await this.minioClient.removeObject(this.bucket, `${file.storedName}.part.${i}`);
+            } catch { /* ignore cleanup errors */ }
+          }
         }
+        // Single-chunk: file already at final path (uploaded directly in uploadChunk)
       } else {
         // Local: concatenate chunks into final file
         const chunksDir = path.join(this.localPath, '.chunks', dto.fileId);
