@@ -218,7 +218,13 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
             height: 36.h,
             child: isActive
                 ? ElevatedButton(
-                    onPressed: () => context.push('/collection/${claim.id}'),
+                    onPressed: () {
+                      if (claim.taskType == 'text') {
+                        context.push('/text-carousel/${claim.id}');
+                      } else {
+                        context.push('/collection/${claim.id}');
+                      }
+                    },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: AppColors.onPrimary,

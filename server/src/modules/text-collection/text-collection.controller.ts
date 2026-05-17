@@ -16,8 +16,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { TextCollectionService } from './text-collection.service';
 import { UploadTextDto, BatchUploadTextDto, AssignTextDto, TextFilterDto } from './dto';
-import { Roles } from '../../common/decorators';
-import { UserRole } from '../../entities';
+import { CurrentUser, Roles } from '../../common/decorators';
+import { UserRole, TextStatus } from '../../entities';
 
 @ApiTags('文本采集')
 @Controller('text-collections')
@@ -92,6 +92,30 @@ export class TextCollectionController {
   @ApiOperation({ summary: '回收过期文本' })
   async recycle() {
     return this.textService.recycleExpiredTexts();
+  }
+
+  @Get('mine')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取我分配到的文本列表' })
+  async getMyTexts(
+    @Query('claimId') claimId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.textService.getMyTexts(claimId, userId);
+  }
+
+  @Patch(':id/status')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '更新文本采集状态' })
+  async updateStatus(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string,
+    @Body('status') status: TextStatus,
+    @Body('fileId') fileId?: string,
+  ) {
+    return this.textService.updateTextStatus(id, status, userId, fileId);
   }
 
   @Patch(':id')

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -318,5 +319,36 @@ export class TextCollectionService {
       completed: map[TextStatus.COMPLETED] || 0,
       qcFailed: map[TextStatus.QC_FAILED] || 0,
     };
+  }
+
+  /** 获取分配给当前用户的文本列表（通过 claimId 找到 taskId + userId） */
+  async getMyTexts(claimId: string, userId: string): Promise<TextCollection[]> {
+    const claim = await this.claimRepository.findOne({
+      where: { id: claimId, userId },
+    });
+    if (!claim) throw new NotFoundException('领取记录不存在或不属于你');
+
+    return this.textRepository.find({
+      where: { taskId: claim.taskId, assignedUserId: userId },
+      order: { sortOrder: 'ASC' },
+    });
+  }
+
+  /** 更新单条文本的采集状态 */
+  async updateTextStatus(
+    id: string,
+    status: TextStatus,
+    userId: string,
+    fileId?: string,
+  ): Promise<TextCollection> {
+    const text = await this.textRepository.findOne({ where: { id } });
+    if (!text) throw new NotFoundException('文本不存在');
+    if (text.assignedUserId !== userId) throw new ForbiddenException('无权操作此文本');
+
+    text.status = status;
+    if (fileId) {
+      text.metadata = { ...(text.metadata || {}), fileId };
+    }
+    return this.textRepository.save(text);
   }
 }

@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SubmissionController } from './submission.controller';
 import { SubmissionService } from './submission.service';
-import { Submission, TaskClaim, Task, FileEntity } from '../../entities';
+import { Submission, TaskClaim, Task, FileEntity, TextCollection } from '../../entities';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Submission, TaskClaim, Task, FileEntity])],
+  imports: [TypeOrmModule.forFeature([Submission, TaskClaim, Task, FileEntity, TextCollection])],
   controllers: [SubmissionController],
   providers: [SubmissionService],
   exports: [SubmissionService],

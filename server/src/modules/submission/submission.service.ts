@@ -16,6 +16,8 @@ import {
   TaskStatus,
   FileEntity,
   FileStatus,
+  TextCollection,
+  TextStatus,
 } from '../../entities';
 import { CreateSubmissionDto, UpdateSubmissionDto } from './dto';
 
@@ -30,6 +32,8 @@ export class SubmissionService {
     private taskRepository: Repository<Task>,
     @InjectRepository(FileEntity)
     private fileRepository: Repository<FileEntity>,
+    @InjectRepository(TextCollection)
+    private textCollectionRepository: Repository<TextCollection>,
   ) {}
 
   async create(userId: string, dto: CreateSubmissionDto): Promise<Submission> {
@@ -70,6 +74,22 @@ export class SubmissionService {
     claim.submittedCount += 1;
     claim.submittedAt = new Date();
     await this.claimRepository.save(claim);
+
+    // 文本轮播采集：批量更新关联文本状态为 COMPLETED
+    if (dto.data?.textResults && Array.isArray(dto.data.textResults)) {
+      const textIds: string[] = dto.data.textResults
+        .map((r: any) => r.textId)
+        .filter((id: any) => typeof id === 'string' && id.length > 0);
+      if (textIds.length > 0) {
+        await this.textCollectionRepository
+          .createQueryBuilder()
+          .update(TextCollection)
+          .set({ status: TextStatus.COMPLETED })
+          .where('id IN (:...ids)', { ids: textIds })
+          .andWhere('assignedUserId = :userId', { userId })
+          .execute();
+      }
+    }
 
     // Trigger QC asynchronously (will be implemented in Phase 2)
     // For now, set to pending review

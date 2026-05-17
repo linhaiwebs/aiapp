@@ -78,6 +78,23 @@ class TextCollectionService {
     final res = await _client.dio.get('/text-collections/stats/$taskId');
     return res.data as Map<String, dynamic>;
   }
+
+  /// 获取我分配到的文本列表（用于轮播采集）
+  Future<List<TextCollectionModel>> getMyTexts(String claimId) async {
+    final res = await _client.dio.get('/text-collections/mine', queryParameters: {
+      'claimId': claimId,
+    });
+    final list = res.data is List ? res.data as List : (res.data['items'] ?? []) as List;
+    return list.map((e) => TextCollectionModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// 更新单条文本采集状态
+  Future<void> updateStatus(String id, String status, {String? fileId}) async {
+    await _client.dio.patch('/text-collections/$id/status', data: {
+      'status': status,
+      if (fileId != null) 'fileId': fileId,
+    });
+  }
 }
 
 final textCollectionServiceProvider = Provider<TextCollectionService>((ref) {

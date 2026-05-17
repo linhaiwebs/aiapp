@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, Like, In } from 'typeorm';
-import { Task, TaskClaim, TaskStatus, TaskReviewStatus, ClaimStatus, User, UserStatus, TeamMember, MemberStatus, TeamMemberRole, Project } from '../../entities';
+import { Task, TaskClaim, TaskStatus, TaskReviewStatus, ClaimStatus, User, UserStatus, TeamMember, MemberStatus, TeamMemberRole, Project, TextCollection, TextStatus, TaskType } from '../../entities';
 import { CreateTaskDto, UpdateTaskDto, TaskFilterDto } from './dto';
 
 @Injectable()
@@ -22,6 +22,8 @@ export class TaskService {
     private teamMemberRepository: Repository<TeamMember>,
     @InjectRepository(Project)
     private projectRepository: Repository<Project>,
+    @InjectRepository(TextCollection)
+    private textCollectionRepository: Repository<TextCollection>,
   ) {}
 
   async create(dto: CreateTaskDto, userId?: string, userRole?: string): Promise<Task> {
@@ -251,7 +253,55 @@ export class TaskService {
       await this.taskRepository.save(task);
     }
 
+    // 文本任务：已领取用户自动从 PENDING 文本池中按顺序分配
+    if (claimStatus === ClaimStatus.CLAIMED && task.type === TaskType.TEXT) {
+      await this.autoAssignTextsForClaim(task, saved);
+    }
+
     return saved;
+  }
+
+  /** 文本任务 — 按任务分配设置从 PENDING 池中取前 N 条分配给新领取者 */
+  private async autoAssignTextsForClaim(task: Task, claim: TaskClaim): Promise<void> {
+    // 计算每人分配条数
+    let perUserCount = 0;
+    if (task.textAssignMode === 'per_user' && (task.textPerUserCount ?? 0) > 0) {
+      perUserCount = Number(task.textPerUserCount);
+    } else if (task.textAssignMode === 'even' && (task.textAssignCount ?? 0) > 0) {
+      const totalPending = await this.textCollectionRepository.count({
+        where: { taskId: task.id, status: TextStatus.PENDING },
+      });
+      perUserCount = Math.ceil(totalPending / Number(task.textAssignCount));
+    } else {
+      // auto 模式或未设置：按 claimedQuantity 动态均分
+      const totalPending = await this.textCollectionRepository.count({
+        where: { taskId: task.id, status: TextStatus.PENDING },
+      });
+      if (totalPending === 0) return;
+      // claimedQuantity 已经 +1，以此为分母
+      const totalAssignees = Number(task.claimedQuantity) || 1;
+      const totalTexts = totalPending + (await this.textCollectionRepository.count({
+        where: { taskId: task.id, status: TextStatus.ASSIGNED },
+      }));
+      perUserCount = Math.ceil(totalTexts / totalAssignees);
+    }
+
+    if (perUserCount <= 0) return;
+
+    const pendingTexts = await this.textCollectionRepository.find({
+      where: { taskId: task.id, status: TextStatus.PENDING },
+      order: { sortOrder: 'ASC' },
+      take: perUserCount,
+    });
+
+    if (pendingTexts.length === 0) return;
+
+    for (const text of pendingTexts) {
+      text.assignedUserId = claim.userId;
+      text.assignedAt = new Date();
+      text.status = TextStatus.ASSIGNED;
+    }
+    await this.textCollectionRepository.save(pendingTexts);
   }
 
   /** 审核员审批任务申请 */
