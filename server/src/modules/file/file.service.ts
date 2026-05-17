@@ -139,26 +139,36 @@ export class FileService {
     }
 
     if (this.storageType === 'local' && totalChunks > 0) {
-      // Concatenate chunks into final file
       const chunksDir = path.join(this.localPath, '.chunks', dto.fileId);
       const finalPath = path.join(this.localPath, file.storedName);
-      const writeStream = fs.createWriteStream(finalPath);
 
-      for (let i = 0; i < totalChunks; i++) {
-        const chunkPath = path.join(chunksDir, `${i}`);
-        if (fs.existsSync(chunkPath)) {
-          const data = fs.readFileSync(chunkPath);
-          writeStream.write(data);
-        }
+      // Ensure target directory exists
+      const finalDir = path.dirname(finalPath);
+      if (!fs.existsSync(finalDir)) {
+        fs.mkdirSync(finalDir, { recursive: true });
       }
-      writeStream.end();
+
+      // Write chunks to final file, awaiting stream completion
+      await new Promise<void>((resolve, reject) => {
+        const writeStream = fs.createWriteStream(finalPath);
+        writeStream.on('error', reject);
+        writeStream.on('finish', resolve);
+
+        for (let i = 0; i < totalChunks; i++) {
+          const chunkPath = path.join(chunksDir, `${i}`);
+          if (fs.existsSync(chunkPath)) {
+            writeStream.write(fs.readFileSync(chunkPath));
+          }
+        }
+        writeStream.end();
+      }).catch((err) => {
+        // Clean up partial file on write error
+        try { fs.unlinkSync(finalPath); } catch {}
+        throw new BadRequestException(`文件写入失败: ${err.message}`);
+      });
 
       // Clean up chunks
-      try {
-        fs.rmSync(chunksDir, { recursive: true, force: true });
-      } catch {
-        // ignore cleanup errors
-      }
+      fs.rmSync(chunksDir, { recursive: true, force: true });
     }
 
     file.status = FileStatus.COMPLETED;
