@@ -13,6 +13,7 @@ import '../../../core/models/task_claim_model.dart';
 import '../../../core/services/task_service.dart';
 import '../../../core/services/submission_service.dart';
 import '../../../core/services/file_service.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../../../core/network/dio_client.dart';
 
 class CollectionWorkbenchPage extends ConsumerStatefulWidget {
@@ -37,6 +38,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   bool _showFullDesc = false;
 
   final AudioRecorder _recorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
@@ -48,6 +50,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   void dispose() {
     _timer?.cancel();
     _recorder.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
@@ -289,22 +292,32 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   void _previewFile(String fileId, String name) {
     final serverBase = ref.read(dioProvider).dio.options.baseUrl;
     final url = '$serverBase/files/$fileId/stream';
+    final isAudio = name.endsWith('.wav') || name.endsWith('.mp3') || name.endsWith('.m4a') || name.endsWith('.aac');
+
+    if (!isAudio) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.black,
+        builder: (ctx) => SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.5,
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.insert_drive_file, color: Colors.white54, size: 48),
+              SizedBox(height: 16.h),
+              Text(name, style: const TextStyle(color: Colors.white, fontSize: 14), textAlign: TextAlign.center),
+            ]),
+          ),
+        ),
+      );
+      return;
+    }
+
+    _audioPlayer.stop();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.black,
-      builder: (ctx) => SizedBox(
-        height: MediaQuery.of(ctx).size.height * 0.5,
-        child: Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.play_circle_outline, color: Colors.white54, size: 48),
-            SizedBox(height: 16.h),
-            Text(name, style: const TextStyle(color: Colors.white, fontSize: 14), textAlign: TextAlign.center),
-            SizedBox(height: 8.h),
-            Text(url, style: const TextStyle(color: Colors.white38, fontSize: 10)),
-          ]),
-        ),
-      ),
+      builder: (ctx) => _AudioPlayerSheet(url: url, name: name, player: _audioPlayer),
     );
   }
 
@@ -895,4 +908,122 @@ class _CollectedFile {
     this.duration,
     required this.type,
   });
+}
+
+class _AudioPlayerSheet extends StatefulWidget {
+  final String url;
+  final String name;
+  final AudioPlayer player;
+
+  const _AudioPlayerSheet({required this.url, required this.name, required this.player});
+
+  @override
+  State<_AudioPlayerSheet> createState() => _AudioPlayerSheetState();
+}
+
+class _AudioPlayerSheetState extends State<_AudioPlayerSheet> {
+  PlayerState _playerState = PlayerState.stopped;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.player.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _playerState = s);
+    });
+    widget.player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
+    });
+    widget.player.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _duration = d);
+    });
+    _play();
+  }
+
+  @override
+  void dispose() {
+    widget.player.stop();
+    super.dispose();
+  }
+
+  Future<void> _play() async {
+    await widget.player.play(UrlSource(widget.url));
+  }
+
+  Future<void> _togglePlayPause() async {
+    if (_playerState == PlayerState.playing) {
+      await widget.player.pause();
+    } else {
+      await widget.player.resume();
+    }
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes.toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isPlaying = _playerState == PlayerState.playing;
+    final progress = _duration.inMilliseconds > 0
+        ? _position.inMilliseconds / _duration.inMilliseconds
+        : 0.0;
+
+    return Container(
+      padding: EdgeInsets.all(24.w),
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.r)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40.w, height: 4.h,
+            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2.r)),
+          ),
+          SizedBox(height: 24.h),
+          Icon(Icons.audiotrack, size: 48.sp, color: Colors.white),
+          SizedBox(height: 12.h),
+          Text(widget.name, style: TextStyle(color: Colors.white, fontSize: 14.sp), textAlign: TextAlign.center),
+          SizedBox(height: 20.h),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4.r),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 4.h,
+              backgroundColor: Colors.white24,
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          SizedBox(height: 8.h),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_fmt(_position), style: TextStyle(color: Colors.white54, fontSize: 12.sp)),
+              Text(_fmt(_duration), style: TextStyle(color: Colors.white54, fontSize: 12.sp)),
+            ],
+          ),
+          SizedBox(height: 12.h),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                iconSize: 56.sp,
+                onPressed: _togglePlayPause,
+                icon: Icon(
+                  isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 16.h),
+        ],
+      ),
+    );
+  }
 }
