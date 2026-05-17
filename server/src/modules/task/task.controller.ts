@@ -78,10 +78,9 @@ export class TaskController {
   }
 
   @Get('claims/all')
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.LEADER, UserRole.SUPER_ADMIN)
+  @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
-  @ApiOperation({ summary: '管理后台全量认领查询' })
+  @ApiOperation({ summary: '管理后台全量认领查询（所有已登录后台用户可访问）' })
   async getAllClaims(
     @Query('page') page = 1,
     @Query('pageSize') pageSize = 20,

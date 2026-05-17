@@ -141,7 +141,7 @@ export default function CollectionDataList() {
     finally { setBatchDeleting(false); }
   };
 
-  const getAudioUrl = (fileId: string) => `/storage/${fileId}`;
+  const getFileStreamUrl = (fileId: string) => `/api/files/${fileId}/stream`;
 
   const handlePlayAudio = (fileId: string) => {
     setPlayingUrl(playingUrl === fileId ? null : fileId);
@@ -226,8 +226,8 @@ export default function CollectionDataList() {
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleOpenEdit(record)}>
             编辑
           </Button>
-          {(type === 'audio' || record.task?.type === 'audio') && record.fileIds?.length > 0 && (
-            <Tooltip title="播放音频">
+          {(type === 'audio' || type === 'video' || record.task?.type === 'audio' || record.task?.type === 'video') && record.fileIds?.length > 0 && (
+            <Tooltip title={type === 'video' ? '播放视频' : '播放音频'}>
               <Button type="link" size="small" icon={<PlayCircleOutlined />}
                 onClick={() => handlePlayAudio(record.fileIds[0])} />
             </Tooltip>
@@ -289,14 +289,21 @@ export default function CollectionDataList() {
         }}
       />
 
-      {/* Audio Player */}
+      {/* Audio/Video Player */}
       {playingUrl && (
-        <div style={{ position: 'fixed', bottom: 20, right: 20, background: '#fff', padding: 16, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }}>
-          <Space>
-            <SoundOutlined />
-            <audio controls autoPlay src={getAudioUrl(playingUrl)} onEnded={() => setPlayingUrl(null)} style={{ height: 36 }} />
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: '#fff', padding: 16, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000, maxWidth: 420 }}>
+          <div style={{ marginBottom: 8, fontWeight: 500 }}>
+            <SoundOutlined style={{ marginRight: 8 }} />
+            {type === 'video' ? '视频预览' : '音频预览'}
+          </div>
+          {type === 'video' ? (
+            <video controls autoPlay src={getFileStreamUrl(playingUrl)} style={{ width: 380, maxHeight: 300, borderRadius: 4 }} onEnded={() => setPlayingUrl(null)} />
+          ) : (
+            <audio controls autoPlay src={getFileStreamUrl(playingUrl)} onEnded={() => setPlayingUrl(null)} style={{ width: 380, height: 36 }} />
+          )}
+          <div style={{ marginTop: 8, textAlign: 'right' }}>
             <Button size="small" onClick={() => setPlayingUrl(null)}>关闭</Button>
-          </Space>
+          </div>
         </div>
       )}
 
@@ -354,12 +361,18 @@ export default function CollectionDataList() {
               </Descriptions.Item>
             )}
             {detailModal.fileIds?.length > 0 && (
-              <Descriptions.Item label="音频播放" span={2}>
+              <Descriptions.Item label={type === 'video' ? '视频播放' : '音频/文件预览'} span={2}>
                 <Space direction="vertical" style={{ width: '100%' }}>
                   {detailModal.fileIds.map((fid: string, idx: number) => (
                     <div key={fid}>
                       <span>文件 {idx + 1}: </span>
-                      <audio controls src={getAudioUrl(fid)} style={{ height: 32, verticalAlign: 'middle' }} />
+                      {type === 'video' ? (
+                        <video controls src={getFileStreamUrl(fid)} style={{ width: '100%', maxHeight: 240, borderRadius: 4, verticalAlign: 'middle' }} />
+                      ) : type === 'image' ? (
+                        <img src={getFileStreamUrl(fid)} alt={`文件 ${idx + 1}`} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 4, verticalAlign: 'middle' }} />
+                      ) : (
+                        <audio controls src={getFileStreamUrl(fid)} style={{ height: 32, verticalAlign: 'middle', width: '100%' }} />
+                      )}
                     </div>
                   ))}
                 </Space>
