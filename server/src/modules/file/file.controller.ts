@@ -91,13 +91,25 @@ export class FileController {
     };
 
     try {
+      console.log(`[upload] step1-init: calling initUpload`);
       const fileEntity = await this.fileService.initUpload(userId, initDto);
+      console.log(`[upload] step1-init: done, fileId=${fileEntity.id}, storedName=${fileEntity.storedName}`);
+
+      console.log(`[upload] step2-chunk: calling uploadChunk`);
       await this.fileService.uploadChunk(fileEntity.id, 0, file.buffer);
+      console.log(`[upload] step2-chunk: done`);
+
+      console.log(`[upload] step3-complete: calling completeUpload`);
       const result = await this.fileService.completeUpload({ fileId: fileEntity.id });
-      console.log(`[upload] done: fileId=${result.id}, storedName=${result.storedName}`);
+      console.log(`[upload] step3-complete: done, fileId=${result.id}, status=${result.status}`);
       return result;
-    } catch (err) {
-      console.error(`[upload] error:`, err instanceof Error ? err.message : err);
+    } catch (err: any) {
+      if (err?.errors) {
+        console.error(`[upload] AggregateError (${err.errors.length}):`,
+          err.errors.map((e: any) => `${e?.constructor?.name}: ${e?.message || e}`).join(' | '));
+      }
+      console.error(`[upload] error type=${err?.constructor?.name}, message=${err?.message}, code=${err?.code}`);
+      if (err?.stack) console.error(`[upload] stack:`, err.stack);
       throw err;
     }
   }
