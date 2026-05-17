@@ -12,6 +12,7 @@ import {
   Res,
   Headers,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
@@ -75,6 +76,11 @@ export class FileController {
     @Body('taskId') taskId?: string,
     @Body('taskType') taskType?: string,
   ) {
+    if (!file) {
+      throw new BadRequestException('未接收到文件');
+    }
+    console.log(`[upload] start: userId=${userId}, name=${file.originalname}, size=${file.size}, mime=${file.mimetype}`);
+
     const initDto: InitUploadDto = {
       originalName: file.originalname,
       fileSize: file.size,
@@ -84,9 +90,16 @@ export class FileController {
       totalChunks: 1,
     };
 
-    const fileEntity = await this.fileService.initUpload(userId, initDto);
-    await this.fileService.uploadChunk(fileEntity.id, 0, file.buffer);
-    return this.fileService.completeUpload({ fileId: fileEntity.id });
+    try {
+      const fileEntity = await this.fileService.initUpload(userId, initDto);
+      await this.fileService.uploadChunk(fileEntity.id, 0, file.buffer);
+      const result = await this.fileService.completeUpload({ fileId: fileEntity.id });
+      console.log(`[upload] done: fileId=${result.id}, storedName=${result.storedName}`);
+      return result;
+    } catch (err) {
+      console.error(`[upload] error:`, err instanceof Error ? err.message : err);
+      throw err;
+    }
   }
 
   @Get(':id/stream')

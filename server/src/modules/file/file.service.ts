@@ -138,37 +138,60 @@ export class FileService {
       );
     }
 
-    if (this.storageType === 'local' && totalChunks > 0) {
-      const chunksDir = path.join(this.localPath, '.chunks', dto.fileId);
-      const finalPath = path.join(this.localPath, file.storedName);
-
-      // Ensure target directory exists
-      const finalDir = path.dirname(finalPath);
-      if (!fs.existsSync(finalDir)) {
-        fs.mkdirSync(finalDir, { recursive: true });
-      }
-
-      // Write chunks to final file, awaiting stream completion
-      await new Promise<void>((resolve, reject) => {
-        const writeStream = fs.createWriteStream(finalPath);
-        writeStream.on('error', reject);
-        writeStream.on('finish', resolve);
-
+    if (totalChunks > 0) {
+      if (this.storageType === 'minio') {
+        // MinIO: compose all chunks into final object
+        const sources = [];
         for (let i = 0; i < totalChunks; i++) {
-          const chunkPath = path.join(chunksDir, `${i}`);
-          if (fs.existsSync(chunkPath)) {
-            writeStream.write(fs.readFileSync(chunkPath));
-          }
+          sources.push({
+            Bucket: this.bucket,
+            Object: `${file.storedName}.part.${i}`,
+          });
         }
-        writeStream.end();
-      }).catch((err) => {
-        // Clean up partial file on write error
-        try { fs.unlinkSync(finalPath); } catch {}
-        throw new BadRequestException(`文件写入失败: ${err.message}`);
-      });
+        await this.minioClient.composeObject(
+          { Bucket: this.bucket, Object: file.storedName },
+          sources,
+        ).catch((err: any) => {
+          console.error(`MinIO compose failed for ${file.storedName}:`, err.message);
+          throw new BadRequestException(`MinIO 文件合并失败: ${err.message}`);
+        });
 
-      // Clean up chunks
-      fs.rmSync(chunksDir, { recursive: true, force: true });
+        // Clean up parts
+        for (let i = 0; i < totalChunks; i++) {
+          try {
+            await this.minioClient.removeObject(this.bucket, `${file.storedName}.part.${i}`);
+          } catch { /* ignore cleanup errors */ }
+        }
+      } else {
+        // Local: concatenate chunks into final file
+        const chunksDir = path.join(this.localPath, '.chunks', dto.fileId);
+        const finalPath = path.join(this.localPath, file.storedName);
+
+        const finalDir = path.dirname(finalPath);
+        if (!fs.existsSync(finalDir)) {
+          fs.mkdirSync(finalDir, { recursive: true });
+        }
+
+        await new Promise<void>((resolve, reject) => {
+          const writeStream = fs.createWriteStream(finalPath);
+          writeStream.on('error', reject);
+          writeStream.on('finish', resolve);
+
+          for (let i = 0; i < totalChunks; i++) {
+            const chunkPath = path.join(chunksDir, `${i}`);
+            if (fs.existsSync(chunkPath)) {
+              writeStream.write(fs.readFileSync(chunkPath));
+            }
+          }
+          writeStream.end();
+        }).catch((err) => {
+          try { fs.unlinkSync(finalPath); } catch {}
+          throw new BadRequestException(`文件写入失败: ${err.message}`);
+        });
+
+        // Clean up chunks
+        fs.rmSync(chunksDir, { recursive: true, force: true });
+      }
     }
 
     file.status = FileStatus.COMPLETED;
