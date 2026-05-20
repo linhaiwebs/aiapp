@@ -8,6 +8,7 @@
     "start": "cd server && npm run start:prod"
   },
   "dependencies": {
+    "ali-oss": "^6.23.0",
     "undici": "^8.2.0"
   },
   "devDependencies": {

@@ -13,6 +13,7 @@ export class FileService {
   private storageType: string;
   private localPath: string;
   private minioClient: any;
+  private ossClient: any;
   private bucket: string;
 
   constructor(
@@ -25,6 +26,8 @@ export class FileService {
 
     if (this.storageType === 'minio') {
       this.initMinio();
+    } else if (this.storageType === 'oss') {
+      this.initOss();
     } else {
       this.ensureLocalDir();
     }
@@ -55,6 +58,24 @@ export class FileService {
     }
   }
 
+  private async initOss() {
+    try {
+      const OSS = await import('ali-oss');
+      this.bucket = this.configService.get<string>('storage.ossBucket') ?? 'xcai';
+      this.ossClient = new OSS.default({
+        region: this.configService.get<string>('storage.ossRegion') ?? 'oss-cn-hangzhou',
+        accessKeyId: this.configService.get<string>('storage.ossAccessKeyId') ?? '',
+        accessKeySecret: this.configService.get<string>('storage.ossAccessKeySecret') ?? '',
+        bucket: this.bucket,
+        endpoint: this.configService.get<string>('storage.ossEndpoint') || undefined,
+      });
+    } catch (err) {
+      console.error('OSS init failed, falling back to local storage:', err.message);
+      this.storageType = 'local';
+      this.ensureLocalDir();
+    }
+  }
+
   private async ensureMinioBucket() {
     try {
       const exists = await this.minioClient.bucketExists(this.bucket);
@@ -66,16 +87,27 @@ export class FileService {
     }
   }
 
-  async initUpload(userId: string, dto: InitUploadDto): Promise<FileEntity> {
+  async initUpload(userId: string, dto: InitUploadDto): Promise<FileEntity & { presignedUrl?: string }> {
     const storedName = `${uuidv4()}_${dto.originalName}`;
+    let fileUrl: string;
+    let presignedUrl: string | undefined;
+
+    if (this.storageType === 'oss') {
+      fileUrl = `${this.bucket}/${storedName}`;
+      // 生成 OSS 预签名上传 URL（PUT 方法，5分钟有效）
+      presignedUrl = await this.getPresignedPutUrl(storedName, dto.mimeType);
+    } else if (this.storageType === 'minio') {
+      fileUrl = `${this.bucket}/${storedName}`;
+    } else {
+      fileUrl = `${this.localPath}/${storedName}`;
+    }
+
     const file = this.fileRepository.create({
       userId,
       taskId: dto.taskId,
       originalName: dto.originalName,
       storedName,
-      fileUrl: this.storageType === 'minio'
-        ? `${this.bucket}/${storedName}`
-        : `${this.localPath}/${storedName}`,
+      fileUrl,
       fileSize: dto.fileSize,
       mimeType: dto.mimeType,
       taskType: dto.taskType,
@@ -83,10 +115,25 @@ export class FileService {
       uploadInfo: {
         totalChunks: dto.totalChunks,
         uploadedChunks: [],
+        presignedUrl,
       },
     });
 
-    return this.fileRepository.save(file);
+    const saved = await this.fileRepository.save(file);
+    return { ...saved, presignedUrl };
+  }
+
+  /** 生成 OSS 预签名 PUT URL（APP 直传用） */
+  async getPresignedPutUrl(objectKey: string, mimeType?: string): Promise<string> {
+    if (this.storageType !== 'oss' || !this.ossClient) {
+      throw new BadRequestException('当前存储模式不支持直传');
+    }
+    const url = this.ossClient.signatureUrl(objectKey, {
+      method: 'PUT',
+      'Content-Type': mimeType || 'application/octet-stream',
+      expires: 300, // 5分钟
+    });
+    return url;
   }
 
   async uploadChunk(
@@ -102,14 +149,19 @@ export class FileService {
 
     const totalChunks = file.uploadInfo?.totalChunks ?? 0;
 
-    if (this.storageType === 'minio') {
-      // Single chunk → upload directly to final path, skip compose
+    if (this.storageType === 'oss') {
+      // OSS: 文件由 APP 直传，这里只记录 chunk 信息
+      // 单分片：文件已通过 presigned URL 直传 OSS，这里只是标记
+      // 多分片：暂不支持（大文件建议走 OSS 分片上传 SDK）
+      if (totalChunks > 1) {
+        throw new BadRequestException('OSS 模式暂不支持多分片，请使用单分片上传');
+      }
+    } else if (this.storageType === 'minio') {
       const objectName = totalChunks <= 1
         ? file.storedName
         : `${file.storedName}.part.${chunkIndex}`;
       await this.minioClient.putObject(this.bucket, objectName, chunkBuffer);
     } else {
-      // Local: write chunk to temp file
       const chunksDir = path.join(this.localPath, '.chunks', fileId);
       if (!fs.existsSync(chunksDir)) {
         fs.mkdirSync(chunksDir, { recursive: true });
@@ -117,7 +169,6 @@ export class FileService {
       fs.writeFileSync(path.join(chunksDir, `${chunkIndex}`), chunkBuffer);
     }
 
-    // Track uploaded chunks
     const uploadInfo = file.uploadInfo || {};
     const uploadedChunks = uploadInfo.uploadedChunks || [];
     if (!uploadedChunks.includes(chunkIndex)) {
@@ -144,15 +195,18 @@ export class FileService {
     }
 
     if (totalChunks > 0) {
-      if (this.storageType === 'minio') {
+      if (this.storageType === 'oss') {
+        // OSS: 验证文件是否已通过直传到达
+        try {
+          await this.ossClient.head(file.storedName);
+        } catch {
+          throw new BadRequestException('OSS 文件未找到，请确认上传已完成');
+        }
+      } else if (this.storageType === 'minio') {
         if (totalChunks > 1) {
-          // Multi-chunk: compose parts into final object
           const sources = [];
           for (let i = 0; i < totalChunks; i++) {
-            sources.push({
-              Bucket: this.bucket,
-              Object: `${file.storedName}.part.${i}`,
-            });
+            sources.push({ Bucket: this.bucket, Object: `${file.storedName}.part.${i}` });
           }
           try {
             await this.minioClient.composeObject(
@@ -163,30 +217,24 @@ export class FileService {
             console.error(`MinIO compose failed for ${file.storedName}:`, err.message);
             throw new BadRequestException(`MinIO 文件合并失败: ${err.message}`);
           }
-
-          // Clean up parts
           for (let i = 0; i < totalChunks; i++) {
             try {
               await this.minioClient.removeObject(this.bucket, `${file.storedName}.part.${i}`);
-            } catch { /* ignore cleanup errors */ }
+            } catch { /* ignore */ }
           }
         }
-        // Single-chunk: file already at final path (uploaded directly in uploadChunk)
       } else {
-        // Local: concatenate chunks into final file
+        // Local: concatenate chunks
         const chunksDir = path.join(this.localPath, '.chunks', dto.fileId);
         const finalPath = path.join(this.localPath, file.storedName);
-
         const finalDir = path.dirname(finalPath);
         if (!fs.existsSync(finalDir)) {
           fs.mkdirSync(finalDir, { recursive: true });
         }
-
         await new Promise<void>((resolve, reject) => {
           const writeStream = fs.createWriteStream(finalPath);
           writeStream.on('error', reject);
           writeStream.on('finish', resolve);
-
           for (let i = 0; i < totalChunks; i++) {
             const chunkPath = path.join(chunksDir, `${i}`);
             if (fs.existsSync(chunkPath)) {
@@ -198,8 +246,6 @@ export class FileService {
           try { fs.unlinkSync(finalPath); } catch {}
           throw new BadRequestException(`文件写入失败: ${err.message}`);
         });
-
-        // Clean up chunks
         fs.rmSync(chunksDir, { recursive: true, force: true });
       }
     }
@@ -219,38 +265,57 @@ export class FileService {
   async getDownloadUrl(id: string): Promise<string> {
     const file = await this.findOne(id);
 
+    if (this.storageType === 'oss') {
+      return this.ossPresignedGetUrl(file.storedName);
+    }
+
     if (this.storageType === 'minio') {
       try {
-        return await this.minioClient.presignedGetObject(
-          this.bucket,
-          file.storedName,
-          60 * 60,
-        );
+        return await this.minioClient.presignedGetObject(this.bucket, file.storedName, 60 * 60);
       } catch {
         return file.fileUrl;
       }
     }
 
-    // Local: return relative path for serving via static middleware
     return `/storage/${file.storedName}`;
   }
 
-  /** 获取文件流（支持 Range 请求） */
+  /** OSS 预签名 GET URL（播放/下载用，1小时有效） */
+  private ossPresignedGetUrl(objectKey: string): string {
+    const cdnDomain = this.configService.get<string>('storage.ossCdnDomain') || '';
+    if (cdnDomain) {
+      return `https://${cdnDomain}/${objectKey}`;
+    }
+    return this.ossClient.signatureUrl(objectKey, {
+      expires: 3600,
+    });
+  }
+
+  /** 获取文件流（支持 Range），OSS 返回重定向 URL */
   async getFileStream(
     id: string,
     range?: { start: number; end: number },
   ): Promise<{
-    stream: fs.ReadStream;
+    stream?: fs.ReadStream;
+    redirectUrl?: string;
     mimeType: string;
     fileSize: number;
     fileName: string;
   }> {
     const file = await this.findOne(id);
 
+    if (this.storageType === 'oss') {
+      return {
+        redirectUrl: this.ossPresignedGetUrl(file.storedName),
+        mimeType: file.mimeType || 'application/octet-stream',
+        fileSize: file.fileSize || 0,
+        fileName: file.originalName,
+      };
+    }
+
     if (this.storageType === 'minio') {
       try {
         const buffer = await this.minioClient.getObject(this.bucket, file.storedName);
-        // Write to temp file for streaming
         const tmpDir = path.join(this.localPath, '.tmp');
         if (!fs.existsSync(tmpDir)) {
           fs.mkdirSync(tmpDir, { recursive: true });
@@ -288,21 +353,21 @@ export class FileService {
       throw new BadRequestException('无权删除此文件');
     }
 
-    if (this.storageType === 'minio') {
+    if (this.storageType === 'oss') {
+      try {
+        await this.ossClient.delete(file.storedName);
+      } catch { /* ignore */ }
+    } else if (this.storageType === 'minio') {
       try {
         await this.minioClient.removeObject(this.bucket, file.storedName);
-      } catch {
-        // Ignore removal errors
-      }
+      } catch { /* ignore */ }
     } else {
       const filePath = path.join(this.localPath, file.storedName);
       try {
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
-      } catch {
-        // Ignore removal errors
-      }
+      } catch { /* ignore */ }
     }
 
     await this.fileRepository.remove(file);

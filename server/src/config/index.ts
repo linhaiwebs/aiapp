@@ -52,6 +52,13 @@ export const storageConfig = registerAs('storage', () => {
     useSSL: process.env.MINIO_USE_SSL === 'true',
     // Local storage config
     localPath: process.env.STORAGE_LOCAL_PATH || 'data/uploads',
+    // OSS config
+    ossRegion: process.env.OSS_REGION || 'oss-cn-hangzhou',
+    ossAccessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
+    ossAccessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
+    ossBucket: process.env.OSS_BUCKET || 'xcai',
+    ossEndpoint: process.env.OSS_ENDPOINT || '',
+    ossCdnDomain: process.env.OSS_CDN_DOMAIN || '',
   };
 });
 
