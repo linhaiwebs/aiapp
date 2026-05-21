@@ -93,10 +93,7 @@ class UpdateService {
             if (!info.forceUpdate)
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('稍后')),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _startDownload(context, info);
-              },
+              onPressed: () => _startDownload(ctx, context, info),
               child: const Text('立即更新'),
             ),
           ],
@@ -106,21 +103,34 @@ class UpdateService {
   }
 
   /// 在 APP 内下载并显示进度条
-  Future<void> _startDownload(BuildContext context, UpdateInfo info) async {
+  Future<void> _startDownload(BuildContext dialogCtx, BuildContext pageCtx, UpdateInfo info) async {
+    if (info.downloadUrl.isEmpty) {
+      ScaffoldMessenger.of(pageCtx).showSnackBar(
+        const SnackBar(content: Text('下载地址无效，请联系管理员'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    // Pop update dialog first
+    Navigator.pop(dialogCtx);
+    // Wait for dialog close animation
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    if (!pageCtx.mounted) return;
+
     // Show download progress dialog
     showDialog(
-      context: context,
+      context: pageCtx,
       barrierDismissible: false,
       builder: (ctx) => _DownloadProgressDialog(
         downloadUrl: info.downloadUrl,
-        dio: _client.dio,
         onDone: (filePath) {
           Navigator.pop(ctx);
           OpenFilex.open(filePath);
         },
         onError: (msg) {
           Navigator.pop(ctx);
-          ScaffoldMessenger.of(context).showSnackBar(
+          ScaffoldMessenger.of(pageCtx).showSnackBar(
             SnackBar(content: Text('下载失败: $msg'), backgroundColor: Colors.red),
           );
         },
@@ -132,13 +142,11 @@ class UpdateService {
 /// 下载进度弹窗（StatefulWidget 管理下载状态）
 class _DownloadProgressDialog extends StatefulWidget {
   final String downloadUrl;
-  final Dio dio;
   final void Function(String filePath) onDone;
   final void Function(String msg) onError;
 
   const _DownloadProgressDialog({
     required this.downloadUrl,
-    required this.dio,
     required this.onDone,
     required this.onError,
   });
@@ -167,7 +175,9 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
 
       setState(() => _status = '正在下载...');
 
-      await widget.dio.download(
+      // Use a fresh Dio instance for download (not the auth-intercepted one)
+      final downloadDio = Dio();
+      await downloadDio.download(
         widget.downloadUrl,
         filePath,
         deleteOnError: true,
@@ -188,7 +198,7 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
         widget.onDone(filePath);
       }
     } catch (e) {
-      widget.onError(e.toString());
+      widget.onError('${e}'.replaceAll(RegExp(r'Exception:?'), '').trim());
     }
   }
 
