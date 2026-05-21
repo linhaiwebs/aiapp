@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -61,7 +62,7 @@ class UpdateService {
     }
   }
 
-  /// 显示更新弹窗，"立即更新"会下载 APK 并触发安装
+  /// 显示更新弹窗
   Future<void> showUpdateDialog(BuildContext context, UpdateInfo info) {
     return showDialog(
       context: context,
@@ -92,7 +93,10 @@ class UpdateService {
             if (!info.forceUpdate)
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('稍后')),
             ElevatedButton(
-              onPressed: () => _downloadAndInstall(ctx, info.downloadUrl),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _startDownload(context, info);
+              },
               child: const Text('立即更新'),
             ),
           ],
@@ -101,30 +105,124 @@ class UpdateService {
     );
   }
 
-  Future<void> _downloadAndInstall(BuildContext ctx, String downloadUrl) async {
-    Navigator.pop(ctx);
+  /// 在 APP 内下载并显示进度条
+  Future<void> _startDownload(BuildContext context, UpdateInfo info) async {
+    // Show download progress dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _DownloadProgressDialog(
+        downloadUrl: info.downloadUrl,
+        dio: _client.dio,
+        onDone: (filePath) {
+          Navigator.pop(ctx);
+          OpenFilex.open(filePath);
+        },
+        onError: (msg) {
+          Navigator.pop(ctx);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('下载失败: $msg'), backgroundColor: Colors.red),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// 下载进度弹窗（StatefulWidget 管理下载状态）
+class _DownloadProgressDialog extends StatefulWidget {
+  final String downloadUrl;
+  final Dio dio;
+  final void Function(String filePath) onDone;
+  final void Function(String msg) onError;
+
+  const _DownloadProgressDialog({
+    required this.downloadUrl,
+    required this.dio,
+    required this.onDone,
+    required this.onError,
+  });
+
+  @override
+  State<_DownloadProgressDialog> createState() => _DownloadProgressDialogState();
+}
+
+class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
+  double _progress = 0;
+  String _status = '准备下载...';
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _doDownload();
+  }
+
+  Future<void> _doDownload() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
       final filePath = '${dir.path}/app_update.apk';
       final file = File(filePath);
       if (await file.exists()) await file.delete();
 
-      _logger.i('Downloading APK from $downloadUrl');
-      await _client.dio.download(
-        downloadUrl,
+      setState(() => _status = '正在下载...');
+
+      await widget.dio.download(
+        widget.downloadUrl,
         filePath,
         deleteOnError: true,
+        onReceiveProgress: (received, total) {
+          if (total > 0 && mounted) {
+            setState(() {
+              _progress = received / total;
+              _status = '${(received / 1048576).toStringAsFixed(1)} / ${(total / 1048576).toStringAsFixed(1)} MB';
+            });
+          }
+        },
       );
-      _logger.i('APK downloaded to $filePath');
 
-      final result = await OpenFilex.open(filePath);
-      if (result.type != ResultType.done) {
-        _logger.w('Open APK failed: ${result.message}');
-        // Fallback: relaunch picker via system file manager
+      if (mounted) {
+        setState(() => _progress = 1.0);
+        setState(() => _status = '下载完成，正在安装...');
+        await Future.delayed(const Duration(milliseconds: 500));
+        widget.onDone(filePath);
       }
     } catch (e) {
-      _logger.e('APK download/install failed: $e');
+      widget.onError(e.toString());
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(_progress >= 1 ? '下载完成' : '正在更新'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: _progress > 0 ? _progress : null,
+              minHeight: 8,
+              backgroundColor: Colors.grey[200],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            _status,
+            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+          ),
+          if (_progress > 0 && _progress < 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                '${(_progress * 100).toStringAsFixed(0)}%',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
