@@ -51,13 +51,13 @@ const TaskReview: React.FC = () => {
         taskApi.pendingReview({ page, pageSize }),
         projectApi.list({ pageSize: 500 }),
       ]);
-      setData((res.data?.items ?? []).map((t: any) => ({ ...t, typeLabel: typeLabels[t.type] || t.type })));
-      setProjects(projRes.data?.items ?? []);
+      setData((res.items ?? []).map((t: any) => ({ ...t, typeLabel: typeLabels[t.type] || t.type })));
+      setProjects(projRes.items ?? []);
       setPagination(prev => ({
         ...prev,
         current: page,
         pageSize,
-        total: res.data?.total ?? 0,
+        total: res.total ?? 0,
       }));
     } catch {
       message.error('加载失败');
