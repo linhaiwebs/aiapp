@@ -1,19 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Pre-recording audio check result
 class AudioCheckResult {
   final bool signalOk, gainOk, silenceOk;
   final double maxDb, avgDb;
-
-  const AudioCheckResult({
-    required this.signalOk, required this.gainOk, required this.silenceOk,
-    required this.maxDb, required this.avgDb,
-  });
-
+  const AudioCheckResult({required this.signalOk, required this.gainOk, required this.silenceOk, required this.maxDb, required this.avgDb});
   bool get allPassed => signalOk && gainOk && silenceOk;
 }
 
@@ -24,38 +19,58 @@ Future<AudioCheckResult?> showAudioCheckDialog({
   required bool checkSilence,
   required int noiseLimitDb,
 }) {
-  return showDialog<AudioCheckResult>(
-    context: context, barrierDismissible: false,
-    builder: (ctx) => _AudioCheckDialog(checkSignal: checkSignal, checkGain: checkGain, checkSilence: checkSilence, noiseLimitDb: noiseLimitDb),
+  return showGeneralDialog<AudioCheckResult>(
+    context: context,
+    barrierDismissible: false,
+    barrierLabel: '',
+    pageBuilder: (ctx, anim1, anim2) => const SizedBox.shrink(),
+    transitionBuilder: (ctx, anim1, anim2, child) {
+      return Center(
+        child: Material(
+          color: Colors.transparent,
+          child: _AudioCheckContent(
+            checkSignal: checkSignal,
+            checkGain: checkGain,
+            checkSilence: checkSilence,
+            noiseLimitDb: noiseLimitDb,
+          ),
+        ),
+      );
+    },
   );
 }
 
-class _AudioCheckDialog extends StatefulWidget {
+class _AudioCheckContent extends StatefulWidget {
   final bool checkSignal, checkGain, checkSilence;
   final int noiseLimitDb;
-  const _AudioCheckDialog({required this.checkSignal, required this.checkGain, required this.checkSilence, required this.noiseLimitDb});
+  const _AudioCheckContent({required this.checkSignal, required this.checkGain, required this.checkSilence, required this.noiseLimitDb});
 
-  @override State<_AudioCheckDialog> createState() => _AudioCheckDialogState();
+  @override State<_AudioCheckContent> createState() => _AudioCheckContentState();
 }
 
-class _AudioCheckDialogState extends State<_AudioCheckDialog> with SingleTickerProviderStateMixin {
-  final AudioRecorder _checkRecorder = AudioRecorder();
+class _AudioCheckContentState extends State<_AudioCheckContent> with SingleTickerProviderStateMixin {
+  late AnimationController _animCtrl;
+  late Animation<double> _rotationAnim;
   String _status = '准备检测...';
   double _progress = 0;
   bool _checking = true, _passed = false;
   bool? _signalOk, _gainOk, _silenceOk;
   double _maxDb = -96, _avgDb = -96;
-  Timer? _timer;
-  double _animValue = 0;
+  final AudioRecorder _checkRecorder = AudioRecorder();
   final List<double> _samples = [];
 
-  @override void initState() { super.initState(); _startAnimation(); _runCheck(); }
-  @override void dispose() { _timer?.cancel(); _checkRecorder.dispose(); super.dispose(); }
+  @override void initState() {
+    super.initState();
+    _animCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _rotationAnim = Tween<double>(begin: 0, end: 1).animate(_animCtrl);
+    _animCtrl.repeat();
+    _runCheck();
+  }
 
-  void _startAnimation() {
-    _timer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      if (mounted) setState(() => _animValue = (_animValue + 0.1) % (3.14159 * 2));
-    });
+  @override void dispose() {
+    _animCtrl.dispose();
+    _checkRecorder.dispose();
+    super.dispose();
   }
 
   Future<void> _runCheck() async {
@@ -64,16 +79,23 @@ class _AudioCheckDialogState extends State<_AudioCheckDialog> with SingleTickerP
       if (!hasPermission) { if (mounted) _setFailed('无麦克风权限'); return; }
 
       setState(() => _status = '正在检测...');
-      await _checkRecorder.start(const RecordConfig(encoder: AudioEncoder.pcm16bits, numChannels: 1, sampleRate: 16000), path: '');
+
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/check_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _checkRecorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1), path: path);
 
       final sub = _checkRecorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen((amp) {
-        _samples.add(amp.current.abs());
+        _samples.add(amp.current);
         if (mounted) setState(() => _progress = (_progress + 0.05).clamp(0.0, 0.95));
       });
 
       await Future.delayed(const Duration(seconds: 2));
       await sub.cancel();
-      await _checkRecorder.stop();
+      final recordedPath = await _checkRecorder.stop();
+      // Clean up temp file
+      if (recordedPath != null) {
+        try { await (await getTemporaryDirectory()).list().firstWhere((f) => f.path == recordedPath).then((f) => f.delete()); } catch (_) {}
+      }
 
       setState(() => _progress = 1);
       _analyzeResults();
@@ -84,108 +106,140 @@ class _AudioCheckDialogState extends State<_AudioCheckDialog> with SingleTickerP
 
   void _analyzeResults() {
     if (_samples.isEmpty) { _setFailed('未检测到音频信号'); return; }
-
-    // Values are dBFS from onAmplitudeChanged: 0=max, -96=silence
     _maxDb = _samples.reduce((a, b) => a > b ? a : b);
     _avgDb = _samples.reduce((a, b) => a + b) / _samples.length;
 
     _signalOk = widget.checkSignal ? _maxDb > -50 : null;
     _gainOk = widget.checkGain ? (_maxDb > -30 && _maxDb < -2) : null;
-    _silenceOk = widget.checkSilence ? _avgDb < -(widget.noiseLimitDb / 2) : null;
+    _silenceOk = widget.checkSilence ? _avgDb < -(widget.noiseLimitDb / 2).clamp(10, 40).toDouble() : null;
 
+    _animCtrl.stop();
     setState(() {
       _checking = false;
       _passed = (_signalOk ?? true) && (_gainOk ?? true) && (_silenceOk ?? true);
     });
 
-    if (_passed && mounted) {
-      Future.delayed(const Duration(milliseconds: 1000), () {
+    if (_passed) {
+      Future.delayed(const Duration(milliseconds: 800), () {
         if (mounted) Navigator.pop(context, AudioCheckResult(signalOk: _signalOk ?? true, gainOk: _gainOk ?? true, silenceOk: _silenceOk ?? true, maxDb: _maxDb, avgDb: _avgDb));
       });
     }
   }
 
-  void _setFailed(String msg) { setState(() { _checking = false; _passed = false; _status = msg; }); }
+  void _setFailed(String msg) { _animCtrl.stop(); setState(() { _checking = false; _passed = false; _status = msg; }); }
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      canPop: !_checking,
-      child: AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLowest,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: SizedBox(
-          width: 260.w,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 16),
+    return Container(
+      width: 300.w,
+      padding: EdgeInsets.all(28.w),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1C1E),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 30, offset: const Offset(0, 10))],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Circular progress
+          SizedBox(
+            width: 140.w, height: 140.w,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Dashed background ring
+                CustomPaint(size: Size(140.w, 140.w), painter: _DashedRingPainter(progress: _checking ? null : 1, color: _checking ? AppColors.primary : _passed ? AppColors.secondary : AppColors.error, animCtrl: _checking ? _animCtrl : null)),
+                // Center icon/text
+                _checking
+                    ? RotationTransition(
+                        turns: _rotationAnim,
+                        child: Icon(Icons.autorenew, size: 32.sp, color: AppColors.primary),
+                      )
+                    : _passed
+                        ? Icon(Icons.check_circle, size: 44.sp, color: AppColors.secondary)
+                        : Icon(Icons.warning_rounded, size: 44.sp, color: AppColors.error),
+              ],
+            ),
+          ),
+          SizedBox(height: 12.h),
+          Text(_checking ? _status : _passed ? '检测通过' : '检测未通过', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: _checking ? AppColors.onSurface : _passed ? AppColors.secondary : AppColors.error)),
+          SizedBox(height: 16.h),
+          if (!_checking) ...[
+            if (widget.checkSignal) _row('信号检测', _signalOk!),
+            if (widget.checkGain) _row('增幅检测', _gainOk!),
+            if (widget.checkSilence) _row('静音检测', _silenceOk!),
+            SizedBox(height: 8.h),
+            Text('峰值 ${_maxDb.toStringAsFixed(1)} dB · 均值 ${_avgDb.toStringAsFixed(1)} dB', style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant)),
+          ],
+          SizedBox(height: 20.h),
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            if (!_checking && !_passed)
               SizedBox(
-                width: 140.w, height: 140.w,
-                child: CustomPaint(
-                  painter: _DashedCirclePainter(progress: _checking ? null : 1, color: _checking ? AppColors.primary : _passed ? AppColors.secondary : AppColors.error, animValue: _animValue),
-                  child: Center(
-                    child: _checking
-                        ? Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.mic, size: 36.sp, color: AppColors.primary), const SizedBox(height: 4), Text(_status, style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant))])
-                        : _passed ? Icon(Icons.check_circle, size: 48.sp, color: AppColors.secondary) : Icon(Icons.warning_rounded, size: 48.sp, color: AppColors.error),
-                  ),
+                height: 38.h,
+                child: ElevatedButton(
+                  onPressed: () { setState(() { _checking = true; _samples.clear(); _progress = 0; }); _animCtrl.repeat(); _runCheck(); },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: AppColors.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  child: const Text('重新检测'),
                 ),
               ),
-              const SizedBox(height: 20),
-              if (!_checking) ...[
-                if (widget.checkSignal) _row('信号检测', _signalOk!),
-                if (widget.checkGain) _row('增幅检测', _gainOk!),
-                if (widget.checkSilence) _row('静音检测', _silenceOk!),
-                const SizedBox(height: 8),
-                Text('最大: ${_maxDb.toStringAsFixed(1)} dB  平均: ${_avgDb.toStringAsFixed(1)} dB', style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant)),
-              ],
-              const SizedBox(height: 16),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                if (!_checking && !_passed) TextButton(onPressed: () { setState(() { _checking = true; _samples.clear(); }); _startAnimation(); _runCheck(); }, child: const Text('重新检测')),
-                if (!_checking) TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-              ]),
-            ],
-          ),
-        ),
+            if (!_checking) SizedBox(width: 12.w),
+            if (!_checking)
+              SizedBox(
+                height: 38.h,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.onSurfaceVariant, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  child: const Text('取消'),
+                ),
+              ),
+          ]),
+        ],
       ),
     );
   }
 
   Widget _row(String label, bool ok) => Padding(
-    padding: EdgeInsets.symmetric(vertical: 4.h),
+    padding: EdgeInsets.symmetric(vertical: 5.h),
     child: Row(children: [
-      Icon(ok ? Icons.check_circle_outline : Icons.cancel_outlined, size: 16.sp, color: ok ? AppColors.secondary : AppColors.error),
-      const SizedBox(width: 8),
-      Text(label, style: TextStyle(fontSize: 13.sp, color: AppColors.onSurface)),
+      Icon(ok ? Icons.check_circle : Icons.cancel, size: 18.sp, color: ok ? AppColors.secondary : AppColors.error),
+      SizedBox(width: 8.w),
+      Text(label, style: TextStyle(fontSize: 14.sp, color: AppColors.onSurface)),
       const Spacer(),
-      Text(ok ? '通过' : '未通过', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: ok ? AppColors.secondary : AppColors.error)),
+      Text(ok ? '通过' : '未通过', style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w600, color: ok ? AppColors.secondary : AppColors.error)),
     ]),
   );
 }
 
-class _DashedCirclePainter extends CustomPainter {
-  final double? progress; final Color color; final double animValue;
-  _DashedCirclePainter({this.progress, required this.color, required this.animValue});
+/// Dashed ring painter — shows progress as filled dash segments
+class _DashedRingPainter extends CustomPainter {
+  final double? progress; final Color color; final AnimationController? animCtrl;
+  _DashedRingPainter({this.progress, required this.color, this.animCtrl});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 8;
-    final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 3..strokeCap = StrokeCap.round;
-    final bgPaint = Paint()..color = color.withValues(alpha: 0.15)..style = PaintingStyle.stroke..strokeWidth = 3;
-    const totalDashes = 40;
-    final sweepAngle = (3.14159 * 2) / totalDashes;
-    final dashLength = sweepAngle * 0.6;
-    for (int i = 0; i < totalDashes; i++) {
-      final startAngle = i * sweepAngle;
+    final radius = size.width / 2 - 6;
+    final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 3.5..strokeCap = StrokeCap.round;
+    final bgPaint = Paint()..color = color.withValues(alpha: 0.12)..style = PaintingStyle.stroke..strokeWidth = 3.5..strokeCap = StrokeCap.round;
+
+    const segs = 36;
+    final segAngle = 2 * 3.14159 / segs;
+    final dashAngle = segAngle * 0.65;
+
+    for (int i = 0; i < segs; i++) {
+      final start = i * segAngle;
       if (progress == null) {
-        final highlighted = ((i + animValue * 3).round() % totalDashes) < 10;
-        canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, dashLength, false, highlighted ? paint : bgPaint);
+        // Animated indeterminate
+        final t = (DateTime.now().millisecondsSinceEpoch / 1000.0) % 2;
+        final offset = (t * segs / 2).round();
+        final active = ((i + offset) % segs) < segs ~/ 2;
+        canvas.drawArc(Rect.fromCircle(center: center, radius: radius), start, dashAngle, false, active ? paint : bgPaint);
       } else {
-        canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, dashLength, false, (i / totalDashes) <= progress! ? paint : bgPaint);
+        canvas.drawArc(Rect.fromCircle(center: center, radius: radius), start, dashAngle, false, (i / segs) <= progress! ? paint : bgPaint);
       }
     }
   }
 
-  @override bool shouldRepaint(covariant _DashedCirclePainter old) => true;
+  @override bool shouldRepaint(covariant _DashedRingPainter old) => true;
 }

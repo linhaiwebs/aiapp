@@ -20,6 +20,7 @@ import '../../../core/services/submission_service.dart';
 import '../../../core/services/file_service.dart';
 import '../../../core/network/dio_client.dart';
 import '../widgets/audio_check_dialog.dart';
+import '../widgets/sound_wave_background.dart';
 
 class TextCarouselPage extends ConsumerStatefulWidget {
   final String claimId;
@@ -42,6 +43,7 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
   Timer? _timer;
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _player = AudioPlayer();
+  bool _audioCheckPassed = false;
 
   // Completed map: textId -> fileId
   Map<String, String> _recordingFileIds = {};
@@ -107,19 +109,22 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       if (!granted.isGranted) return;
     }
 
-    // Pre-recording audio check (if detection features are enabled)
-    final needsCheck = _claim?.signalDetection == true ||
-        _claim?.gainDetection == true ||
-        _claim?.silenceDetection == true;
-    if (needsCheck) {
-      final result = await showAudioCheckDialog(
-        context: context,
-        checkSignal: _claim?.signalDetection ?? false,
-        checkGain: _claim?.gainDetection ?? false,
-        checkSilence: _claim?.silenceDetection ?? false,
-        noiseLimitDb: _claim?.noiseLimit ?? 60,
-      );
-      if (result == null || !result.allPassed) return;
+    // Pre-recording audio check (once per session)
+    if (!_audioCheckPassed) {
+      final needsCheck = _claim?.signalDetection == true ||
+          _claim?.gainDetection == true ||
+          _claim?.silenceDetection == true;
+      if (needsCheck) {
+        final result = await showAudioCheckDialog(
+          context: context,
+          checkSignal: _claim?.signalDetection ?? false,
+          checkGain: _claim?.gainDetection ?? false,
+          checkSilence: _claim?.silenceDetection ?? false,
+          noiseLimitDb: _claim?.noiseLimit ?? 60,
+        );
+        if (result == null || !result.allPassed) return;
+      }
+      _audioCheckPassed = true;
     }
 
     // Start actual recording
@@ -251,10 +256,35 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
 
   @override
   Widget build(BuildContext context) {
+    final mainBody = _isLoading
+        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+        : _texts.isEmpty
+            ? _buildEmpty()
+            : Column(
+                children: [
+                  LinearProgressIndicator(
+                    value: _doneCount / _texts.length, minHeight: 3.h,
+                    backgroundColor: AppColors.outlineVariant,
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                  _buildInstructions(),
+                  Expanded(
+                    child: PageView.builder(
+                      scrollDirection: Axis.vertical,
+                      physics: _isRecording ? const NeverScrollableScrollPhysics() : const BouncingScrollPhysics(),
+                      itemCount: _texts.length,
+                      itemBuilder: (ctx, i) => _buildCard(_texts[i], i),
+                    ),
+                  ),
+                  _buildBottomBar(),
+                ],
+              );
+
     return Scaffold(
       backgroundColor: AppColors.background,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: AppColors.background.withValues(alpha: 0.8),
         title: Text(
           _claim?.taskTitle ?? (_taskType == 'audio' ? '语音采集' : '文本采集'),
           style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: AppColors.onSurface),
@@ -264,44 +294,18 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
             Center(
               child: Padding(
                 padding: EdgeInsets.only(right: 16.w),
-                child: Text(
-                  '$_doneCount/${_texts.length}',
-                  style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary),
-                ),
+                child: Text('$_doneCount/${_texts.length}',
+                    style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
               ),
             ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : _texts.isEmpty
-              ? _buildEmpty()
-              : Column(
-                  children: [
-                    // Progress bar
-                    LinearProgressIndicator(
-                      value: _doneCount / _texts.length,
-                      minHeight: 3.h,
-                      backgroundColor: AppColors.outlineVariant,
-                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    ),
-                    // Instructions (collapsible)
-                    _buildInstructions(),
-                    // Card carousel
-                    Expanded(
-                      child: PageView.builder(
-                        scrollDirection: Axis.vertical,
-                        physics: _isRecording
-                            ? const NeverScrollableScrollPhysics()
-                            : const BouncingScrollPhysics(),
-                        itemCount: _texts.length,
-                        itemBuilder: (ctx, i) => _buildCard(_texts[i], i),
-                      ),
-                    ),
-                    // Bottom submit bar
-                    _buildBottomBar(),
-                  ],
-                ),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: SoundWaveBackground()),
+          mainBody,
+        ],
+      ),
     );
   }
 

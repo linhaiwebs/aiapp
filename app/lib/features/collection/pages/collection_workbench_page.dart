@@ -19,6 +19,7 @@ import '../../../core/services/file_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../../core/network/dio_client.dart';
 import '../widgets/audio_check_dialog.dart';
+import '../widgets/sound_wave_background.dart';
 
 class CollectionWorkbenchPage extends ConsumerStatefulWidget {
   final String claimId;
@@ -42,6 +43,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   bool _showFullDesc = false;
 
   final AudioRecorder _recorder = AudioRecorder();
+  bool _audioCheckPassed = false;
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
@@ -105,12 +107,13 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         }
       }
 
-      // Pre-recording audio check
-      final needsCheck = _claim?.signalDetection == true ||
-          _claim?.gainDetection == true ||
-          _claim?.silenceDetection == true;
-      if (needsCheck) {
-        final result = await showAudioCheckDialog(
+      // Pre-recording audio check (once per session)
+      if (!_audioCheckPassed) {
+        final needsCheck = _claim?.signalDetection == true ||
+            _claim?.gainDetection == true ||
+            _claim?.silenceDetection == true;
+        if (needsCheck) {
+          final result = await showAudioCheckDialog(
           context: context,
           checkSignal: _claim?.signalDetection ?? false,
           checkGain: _claim?.gainDetection ?? false,
@@ -118,6 +121,8 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
           noiseLimitDb: _claim?.noiseLimit ?? 60,
         );
         if (result == null || !result.allPassed) return;
+      }
+      _audioCheckPassed = true;
       }
 
       final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);
