@@ -51,13 +51,13 @@ const ClaimedTasks: React.FC = () => {
         taskApi.allClaims({ page, pageSize, ...filters }),
         teamApi.list({ pageSize: 500 }),
       ]);
-      setData(claimsRes.items ?? []);
-      setTeams(teamsRes.items ?? []);
+      setData((claimsRes as any).items ?? []);
+      setTeams((teamsRes as any).items ?? []);
       setPagination(prev => ({
         ...prev,
         current: page,
         pageSize,
-        total: claimsRes.total ?? 0,
+        total: (claimsRes as any).total ?? 0,
       }));
     } catch (e) {
       message.error('加载失败');
