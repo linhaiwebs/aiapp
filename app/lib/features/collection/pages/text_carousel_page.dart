@@ -123,67 +123,89 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
           noiseLimitDb: _claim?.noiseLimit ?? 60,
         );
         if (result == null || !result.allPassed) return;
+        // Small delay to let the check recorder fully release
+        await Future.delayed(const Duration(milliseconds: 300));
       }
       _audioCheckPassed = true;
     }
 
     // Start actual recording
-    final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);
-    final path = kIsWeb
-        ? 'rec_${DateTime.now().millisecondsSinceEpoch}.opus'
-        : '${(await getTemporaryDirectory()).path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
-    await _recorder.start(config, path: path);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
-    });
-    setState(() {
-      _isRecording = true;
-      _recordingTextId = textId;
-    });
+    try {
+      final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);
+      final path = kIsWeb
+          ? 'rec_${DateTime.now().millisecondsSinceEpoch}.opus'
+          : '${(await getTemporaryDirectory()).path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
+      await _recorder.start(config, path: path);
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
+      });
+      setState(() {
+        _isRecording = true;
+        _recordingTextId = textId;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('录音启动失败: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
   }
 
   Future<void> _stopRecording(String textId) async {
     _timer?.cancel();
-    final path = await _recorder.stop();
-    if (path == null || !mounted) return;
+    try {
+      final path = await _recorder.stop();
+      if (path == null || !mounted) {
+        setState(() { _isRecording = false; _recordingTextId = null; _recordingDuration = Duration.zero; });
+        return;
+      }
 
-    final dur = _recordingDuration;
-    setState(() {
-      _isRecording = false;
-      _recordingTextId = null;
-      _recordingDuration = Duration.zero;
-    });
+      final dur = _recordingDuration;
+      setState(() {
+        _isRecording = false;
+        _recordingTextId = null;
+        _recordingDuration = Duration.zero;
+      });
 
-    // Upload
-    Map<String, dynamic> fileEntity;
-    if (kIsWeb) {
-      final bytes = (await Dio().get(path, options: Options(responseType: ResponseType.bytes))).data as Uint8List;
-      fileEntity = await ref.read(fileServiceProvider).simpleUploadBytes(
-        fileName: 'rec_opus_${DateTime.now().millisecondsSinceEpoch}.opus',
-        bytes: bytes,
-        taskId: _claim?.taskId,
-        taskType: 'audio',
+      // Upload
+      Map<String, dynamic> fileEntity;
+      if (kIsWeb) {
+        final bytes = (await Dio().get(path, options: Options(responseType: ResponseType.bytes))).data as Uint8List;
+        fileEntity = await ref.read(fileServiceProvider).simpleUploadBytes(
+          fileName: 'rec_opus_${DateTime.now().millisecondsSinceEpoch}.opus',
+          bytes: bytes,
+          taskId: _claim?.taskId,
+          taskType: 'audio',
+        );
+      } else {
+        fileEntity = await ref.read(fileServiceProvider).simpleUpload(path,
+          taskId: _claim?.taskId,
+          taskType: 'audio',
+        );
+      }
+
+      if (!mounted) return;
+      final fileId = fileEntity['id'] as String;
+
+      await ref.read(textCollectionServiceProvider).updateStatus(
+        textId, 'completed',
+        fileId: fileId,
       );
-    } else {
-      fileEntity = await ref.read(fileServiceProvider).simpleUpload(path,
-        taskId: _claim?.taskId,
-        taskType: 'audio',
-      );
+
+      if (!mounted) return;
+      setState(() {
+        _recordingFileIds[textId] = fileId;
+        _durations[textId] = dur.inMilliseconds / 1000.0;
+      });
+    } catch (e) {
+      setState(() { _isRecording = false; _recordingTextId = null; _recordingDuration = Duration.zero; });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('录音失败: $e'), backgroundColor: AppColors.error),
+        );
+      }
     }
-
-    if (!mounted) return;
-    final fileId = fileEntity['id'] as String;
-
-    await ref.read(textCollectionServiceProvider).updateStatus(
-      textId, 'completed',
-      fileId: fileId,
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _recordingFileIds[textId] = fileId;
-      _durations[textId] = dur.inMilliseconds / 1000.0;
-    });
   }
 
   // ─── Re-record ──────────────────────────────────────────────

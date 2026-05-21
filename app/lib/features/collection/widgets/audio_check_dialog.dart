@@ -69,8 +69,15 @@ class _AudioCheckContentState extends State<_AudioCheckContent> with SingleTicke
 
   @override void dispose() {
     _animCtrl.dispose();
-    _checkRecorder.dispose();
+    _checkRecorder.stop().then((_) => _checkRecorder.dispose());
     super.dispose();
+  }
+
+  // Cleanup before popping to ensure recorder is released
+  Future<void> _cleanupAndPop([AudioCheckResult? result]) async {
+    try { await _checkRecorder.stop(); } catch (_) {}
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (mounted) Navigator.pop(context, result);
   }
 
   Future<void> _runCheck() async {
