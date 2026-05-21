@@ -181,18 +181,21 @@ export class TaskService {
     });
     if (existingCount > 0) return; // Already synced, skip
 
-    const texts = lines.map((content, index) =>
-      this.textCollectionRepository.create({
-        taskId: task.id,
-        content,
-        format: 'plain' as any,
-        sortOrder: index,
-        status: TextStatus.PENDING,
-      }),
-    );
-
-    await this.textCollectionRepository.save(texts);
-    console.log(`[syncTextCollections] Created ${texts.length} texts for task ${task.id}`);
+    // Batch insert to avoid PostgreSQL parameter limit
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < lines.length; i += BATCH_SIZE) {
+      const batch = lines.slice(i, i + BATCH_SIZE).map((content, j) =>
+        this.textCollectionRepository.create({
+          taskId: task.id,
+          content,
+          format: 'plain' as any,
+          sortOrder: i + j,
+          status: TextStatus.PENDING,
+        }),
+      );
+      await this.textCollectionRepository.save(batch);
+    }
+    console.log(`[syncTextCollections] Created ${lines.length} texts for task ${task.id}`);
   }
 
   async remove(id: string): Promise<void> {
@@ -345,7 +348,9 @@ export class TaskService {
             status: TextStatus.ASSIGNED,
           }),
         );
-        await this.textCollectionRepository.save(copies);
+        for (let i = 0; i < copies.length; i += 500) {
+          await this.textCollectionRepository.save(copies.slice(i, i + 500));
+        }
         return;
       }
 

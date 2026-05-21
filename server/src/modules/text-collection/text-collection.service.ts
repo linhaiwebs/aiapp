@@ -62,7 +62,11 @@ export class TextCollectionService {
     );
 
     if (texts.length === 0) throw new BadRequestException('文本列表不能为空');
-    await this.textRepository.save(texts);
+
+    // Batch insert to avoid PostgreSQL parameter limit
+    for (let i = 0; i < texts.length; i += 500) {
+      await this.textRepository.save(texts.slice(i, i + 500));
+    }
     return { count: texts.length };
   }
 
@@ -105,7 +109,10 @@ export class TextCollectionService {
       }),
     );
 
-    await this.textRepository.save(texts);
+    // Batch insert to avoid PostgreSQL parameter limit
+    for (let i = 0; i < texts.length; i += 500) {
+      await this.textRepository.save(texts.slice(i, i + 500));
+    }
     return { count: texts.length };
   }
 
@@ -254,7 +261,10 @@ export class TextCollectionService {
             status: TextStatus.ASSIGNED,
           }),
         );
-        await this.textRepository.save(copies);
+        // Batch save copies
+        for (let i = 0; i < copies.length; i += 500) {
+          await this.textRepository.save(copies.slice(i, i + 500));
+        }
       }
       return { assigned: unassignedTexts.length * claims.length };
     }
@@ -279,7 +289,9 @@ export class TextCollectionService {
         });
         copies.push(copy);
       }
-      await this.textRepository.save(copies);
+      for (let i = 0; i < copies.length; i += 500) {
+        await this.textRepository.save(copies.slice(i, i + 500));
+      }
       return { assigned: copies.length };
     }
 
@@ -401,7 +413,9 @@ export class TextCollectionService {
           status: TextStatus.ASSIGNED,
         }),
       );
-      await this.textRepository.save(copies);
+      for (let i = 0; i < copies.length; i += 500) {
+        await this.textRepository.save(copies.slice(i, i + 500));
+      }
       return;
     }
 
