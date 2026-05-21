@@ -134,8 +134,8 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         _audioCheckPassed = true;
       }
 
-      final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
-      await _recorder.start(const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1), path: opusPath);
+      final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: opusPath);
 
       setState(() {
         _isRecording = true;

@@ -138,8 +138,8 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       }
 
       // Start opus recording
-      final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
-      await _recorder.start(const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1), path: opusPath);
+      final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: opusPath);
 
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
@@ -162,10 +162,16 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
     _timer?.cancel();
     try {
       final path = await _recorder.stop();
-      if (path == null || !mounted) {
+      if (path == null) {
         setState(() { _isRecording = false; _recordingTextId = null; _recordingDuration = Duration.zero; });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('录音失败：无法获取录音文件，请重试'), backgroundColor: AppColors.error),
+          );
+        }
         return;
       }
+      if (!mounted) return;
 
       final dur = _recordingDuration;
       setState(() {
@@ -545,34 +551,9 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
         children: [
           // Progress dots
           Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    for (int i = 0; i < _texts.length && i < 40; i++)
-                      Container(
-                        width: 6.w,
-                        height: 6.w,
-                        margin: EdgeInsets.only(right: 3.w),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _recordingFileIds.containsKey(_texts[i].id)
-                              ? AppColors.secondary
-                              : AppColors.outlineVariant,
-                        ),
-                      ),
-                    if (_texts.length > 40)
-                      Text(' ...', style: TextStyle(fontSize: 10.sp, color: AppColors.outline)),
-                  ],
-                ),
-                SizedBox(height: 4.h),
-                Text(
-                  _taskType == 'audio' ? '已录制 $_doneCount/${_texts.length} 条' : '已录制 $_doneCount/${_texts.length} 条',
-                  style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant),
-                ),
-              ],
+            child: Text(
+              '已录制 $_doneCount/${_texts.length} 条',
+              style: TextStyle(fontSize: 13.sp, color: AppColors.onSurfaceVariant),
             ),
           ),
           SizedBox(
