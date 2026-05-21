@@ -107,29 +107,35 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         }
       }
 
-      // Pre-recording audio check (once per session)
+      final dir = await getTemporaryDirectory();
+
+      // Pre-recording audio check (once per session, uses same recorder)
       if (!_audioCheckPassed) {
         final needsCheck = _claim?.signalDetection == true ||
             _claim?.gainDetection == true ||
             _claim?.silenceDetection == true;
         if (needsCheck) {
+          final checkPath = '${dir.path}/check_${DateTime.now().millisecondsSinceEpoch}.m4a';
+          await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1), path: checkPath);
+          final stream = _recorder.onAmplitudeChanged(const Duration(milliseconds: 100));
           final result = await showAudioCheckDialog(
-          context: context,
-          checkSignal: _claim?.signalDetection ?? false,
-          checkGain: _claim?.gainDetection ?? false,
-          checkSilence: _claim?.silenceDetection ?? false,
-          noiseLimitDb: _claim?.noiseLimit ?? 60,
-        );
-        if (result == null || !result.allPassed) return;
-      }
-      _audioCheckPassed = true;
+            context: context,
+            checkSignal: _claim?.signalDetection ?? false,
+            checkGain: _claim?.gainDetection ?? false,
+            checkSilence: _claim?.silenceDetection ?? false,
+            noiseLimitDb: _claim?.noiseLimit ?? 60,
+            amplitudeStream: stream,
+            stopCheck: () => _recorder.stop(),
+          );
+          await _recorder.stop();
+          if (result == null || !result.allPassed) return;
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+        _audioCheckPassed = true;
       }
 
-      final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);
-      final path = kIsWeb
-          ? 'rec_${DateTime.now().millisecondsSinceEpoch}.opus'
-          : '${(await getTemporaryDirectory()).path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
-      await _recorder.start(config, path: path);
+      final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1), path: opusPath);
 
       setState(() {
         _isRecording = true;
