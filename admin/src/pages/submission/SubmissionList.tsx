@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
   Table, Button, Space, Card, Tag, Select, Modal, Input,
-  Descriptions, message, Tabs, Form, Popconfirm,
+  Descriptions, message, Tabs, Form, Dropdown,
 } from 'antd';
 import {
   CheckCircleOutlined, CloseCircleOutlined, EyeOutlined,
-  EditOutlined, DeleteOutlined,
+  EditOutlined, DeleteOutlined, MoreOutlined,
 } from '@ant-design/icons';
 import { submissionApi } from '../../api';
 
@@ -211,40 +211,24 @@ export default function SubmissionList() {
     {
       title: '操作',
       key: 'action',
-      width: 300,
+      width: 220,
       render: (_: any, record: any) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>
-            详情
-          </Button>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleOpenEdit(record)}>
-            编辑
-          </Button>
+        <Space size={0}>
+          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>详情</Button>
           {record.status === 'pending_review' && (
-            <>
-              <Button
-                type="link"
-                size="small"
-                style={{ color: '#52c41a' }}
-                icon={<CheckCircleOutlined />}
-                onClick={() => handleApprove(record.id)}
-              >
-                通过
-              </Button>
-              <Button
-                type="link"
-                size="small"
-                danger
-                icon={<CloseCircleOutlined />}
-                onClick={() => handleReject(record)}
-              >
-                驳回
-              </Button>
-            </>
+            <Button type="link" size="small" style={{ color: '#52c41a' }} icon={<CheckCircleOutlined />} onClick={() => handleApprove(record.id)}>通过</Button>
           )}
-          <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)}>
-            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'edit', icon: <EditOutlined />, label: '编辑', onClick: () => handleOpenEdit(record) },
+                ...(record.status === 'pending_review' ? [{ key: 'reject', icon: <CloseCircleOutlined />, label: '驳回', danger: true, onClick: () => handleReject(record) }] : []),
+                { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true, onClick: () => { if (confirm('确认删除？')) handleDelete(record.id); } },
+              ],
+            }}
+          >
+            <Button type="link" size="small" icon={<MoreOutlined />} />
+          </Dropdown>
         </Space>
       ),
     },
@@ -347,9 +331,21 @@ export default function SubmissionList() {
                   <span style={{ color: '#ff4d4f' }}>{detailModal.rejectReason}</span>
                 </Descriptions.Item>
               )}
+              {detailModal.fileIds?.length > 0 && (
+                <Descriptions.Item label="音频/文件预览" span={2}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+                    {detailModal.fileIds.map((fid: string, idx: number) => (
+                      <div key={fid} style={{ background: '#f5f5f5', borderRadius: 8, padding: 8, width: '100%' }}>
+                        <div style={{ marginBottom: 4, fontSize: 12, color: '#888' }}>文件 {idx + 1}</div>
+                        <audio controls src={`/api/files/${fid}/stream`} style={{ width: '100%', minHeight: 44 }} />
+                      </div>
+                    ))}
+                  </div>
+                </Descriptions.Item>
+              )}
               {detailModal.data && (
                 <Descriptions.Item label="采集数据" span={2}>
-                  <pre style={{ margin: 0, fontSize: 12 }}>{JSON.stringify(detailModal.data, null, 2)}</pre>
+                  <pre style={{ margin: 0, fontSize: 12, maxHeight: 200, overflow: 'auto' }}>{JSON.stringify(detailModal.data, null, 2)}</pre>
                 </Descriptions.Item>
               )}
             </Descriptions>

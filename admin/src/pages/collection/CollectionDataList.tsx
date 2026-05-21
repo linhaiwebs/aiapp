@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Table, Card, Tag, Space, Select, Button, Modal, Descriptions, message, Input, Tooltip, Form, Popconfirm } from 'antd';
-import { EyeOutlined, PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, SoundOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Card, Tag, Space, Select, Button, Modal, Descriptions, message, Input, Tooltip, Form, Dropdown } from 'antd';
+import { EyeOutlined, PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, SoundOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 import { submissionApi } from '../../api';
 
 const typeLabels: Record<string, string> = {
@@ -217,32 +217,29 @@ export default function CollectionDataList() {
     {
       title: '操作',
       key: 'action',
-      width: 300,
+      width: 260,
       render: (_: any, record: any) => (
-        <Space size="small">
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>
-            详情
-          </Button>
-          <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleOpenEdit(record)}>
-            编辑
-          </Button>
+        <Space size={0}>
+          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>详情</Button>
           {(type === 'audio' || type === 'video' || record.task?.type === 'audio' || record.task?.type === 'video') && record.fileIds?.length > 0 && (
-            <Tooltip title={type === 'video' ? '播放视频' : '播放音频'}>
-              <Button type="link" size="small" icon={<PlayCircleOutlined />}
-                onClick={() => handlePlayAudio(record.fileIds[0])} />
+            <Tooltip title="播放">
+              <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => handlePlayAudio(record.fileIds[0])} />
             </Tooltip>
           )}
           {record.status === 'pending_review' && (
-            <>
-              <Button type="link" size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a' }}
-                onClick={() => handleApprove(record.id)}>通过</Button>
-              <Button type="link" size="small" danger icon={<CloseCircleOutlined />}
-                onClick={() => { setRejectModal(record); setRejectReason(''); }}>驳回</Button>
-            </>
+            <Button type="link" size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a' }} onClick={() => handleApprove(record.id)}>通过</Button>
           )}
-          <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)}>
-            <Button type="link" size="small" danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'edit', icon: <EditOutlined />, label: '编辑', onClick: () => handleOpenEdit(record) },
+                ...(record.status === 'pending_review' ? [{ key: 'reject', icon: <CloseCircleOutlined />, label: '驳回', danger: true, onClick: () => { setRejectModal(record); setRejectReason(''); } }] : []),
+                { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true, onClick: () => { if (confirm('确认删除？')) handleDelete(record.id); } },
+              ],
+            }}
+          >
+            <Button type="link" size="small" icon={<MoreOutlined />} />
+          </Dropdown>
         </Space>
       ),
     },
@@ -297,9 +294,9 @@ export default function CollectionDataList() {
             {type === 'video' ? '视频预览' : '音频预览'}
           </div>
           {type === 'video' ? (
-            <video controls autoPlay src={getFileStreamUrl(playingUrl)} style={{ width: 380, maxHeight: 300, borderRadius: 4 }} onEnded={() => setPlayingUrl(null)} />
+            <video controls autoPlay src={getFileStreamUrl(playingUrl)} style={{ width: '100%', maxHeight: 300, borderRadius: 4 }} onEnded={() => setPlayingUrl(null)} />
           ) : (
-            <audio controls autoPlay src={getFileStreamUrl(playingUrl)} onEnded={() => setPlayingUrl(null)} style={{ width: 380, height: 36 }} />
+            <audio controls autoPlay src={getFileStreamUrl(playingUrl)} onEnded={() => setPlayingUrl(null)} style={{ width: '100%', minHeight: 44 }} />
           )}
           <div style={{ marginTop: 8, textAlign: 'right' }}>
             <Button size="small" onClick={() => setPlayingUrl(null)}>关闭</Button>
@@ -362,20 +359,22 @@ export default function CollectionDataList() {
             )}
             {detailModal.fileIds?.length > 0 && (
               <Descriptions.Item label={type === 'video' ? '视频播放' : '音频/文件预览'} span={2}>
-                <Space direction="vertical" style={{ width: '100%' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
                   {detailModal.fileIds.map((fid: string, idx: number) => (
-                    <div key={fid}>
-                      <span>文件 {idx + 1}: </span>
+                    <div key={fid} style={{ width: '100%' }}>
+                      <div style={{ marginBottom: 4, fontSize: 12, color: '#888' }}>文件 {idx + 1}</div>
                       {type === 'video' ? (
-                        <video controls src={getFileStreamUrl(fid)} style={{ width: '100%', maxHeight: 240, borderRadius: 4, verticalAlign: 'middle' }} />
+                        <video controls src={getFileStreamUrl(fid)} style={{ width: '100%', maxHeight: 240, borderRadius: 6 }} />
                       ) : type === 'image' ? (
-                        <img src={getFileStreamUrl(fid)} alt={`文件 ${idx + 1}`} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 4, verticalAlign: 'middle' }} />
+                        <img src={getFileStreamUrl(fid)} alt={`文件 ${idx + 1}`} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 6 }} />
                       ) : (
-                        <audio controls src={getFileStreamUrl(fid)} style={{ height: 32, verticalAlign: 'middle', width: '100%' }} />
+                        <div style={{ background: '#f5f5f5', borderRadius: 8, padding: 8 }}>
+                          <audio controls src={getFileStreamUrl(fid)} style={{ width: '100%', minHeight: 44 }} />
+                        </div>
                       )}
                     </div>
                   ))}
-                </Space>
+                </div>
               </Descriptions.Item>
             )}
             {detailModal.data && (

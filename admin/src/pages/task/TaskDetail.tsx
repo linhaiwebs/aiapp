@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Descriptions, Spin, Tag, Button, Progress, message } from 'antd';
+import { Card, Descriptions, Spin, Tag, Button, Progress, message, Pagination } from 'antd';
 import { EditOutlined, ArrowLeftOutlined } from '@ant-design/icons';
 import { taskApi } from '../../api';
 
@@ -104,7 +104,7 @@ export default function TaskDetail() {
             {task.description || '-'}
           </Descriptions.Item>
           <Descriptions.Item label="任务说明" span={2}>
-            <div style={{ whiteSpace: 'pre-wrap' }}>{task.instructions || '-'}</div>
+            <InstructionsViewer text={task.instructions || ''} />
           </Descriptions.Item>
           {task.project && (
             <Descriptions.Item label="所属项目" span={2}>
@@ -138,6 +138,42 @@ export default function TaskDetail() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+// ── Paginated instructions viewer ──
+const LINES_PER_PAGE = 50;
+
+function InstructionsViewer({ text }: { text: string }) {
+  const [page, setPage] = useState(1);
+
+  const { pages, lines } = useMemo(() => {
+    if (!text) return { pages: 0, lines: [] as string[] };
+    const allLines = text.split('\n');
+    const p = Math.ceil(allLines.length / LINES_PER_PAGE);
+    const start = (page - 1) * LINES_PER_PAGE;
+    const currentLines = allLines.slice(start, start + LINES_PER_PAGE);
+    return { pages: p, lines: currentLines };
+  }, [text, page]);
+
+  if (!text) return <span>-</span>;
+
+  return (
+    <div>
+      <div style={{ whiteSpace: 'pre-wrap', maxHeight: '60vh', overflow: 'auto', marginBottom: 12, border: '1px solid #f0f0f0', borderRadius: 6, padding: 12, background: '#fafafa' }}>
+        {lines.join('\n')}
+      </div>
+      {pages > 1 && (
+        <Pagination
+          simple
+          current={page}
+          total={text.split('\n').length}
+          pageSize={LINES_PER_PAGE}
+          onChange={setPage}
+          showSizeChanger={false}
+        />
+      )}
     </div>
   );
 }
