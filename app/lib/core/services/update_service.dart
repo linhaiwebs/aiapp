@@ -172,6 +172,14 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
       final filePath = '${dir.path}/app_update.apk';
       final file = File(filePath);
       if (await file.exists()) await file.delete();
+      // Also clean up old download in external storage
+      try {
+        final extDir = await getExternalStorageDirectory();
+        if (extDir != null) {
+          final oldFile = File('${extDir.path}/app_update.apk');
+          if (await oldFile.exists()) await oldFile.delete();
+        }
+      } catch (_) {}
 
       setState(() => _status = '正在下载...');
 
