@@ -61,14 +61,18 @@ export class FileService {
   private async initOss() {
     try {
       const OSS = await import('ali-oss');
+      // ali-oss v6 exports as CommonJS module.exports = Client
+      // Dynamic import can produce either OSS.default or OSS depending on Node.js version
+      const OSSClient = (OSS as any).default || OSS;
       this.bucket = this.configService.get<string>('storage.ossBucket') ?? 'xcai';
-      this.ossClient = new OSS.default({
+      this.ossClient = new OSSClient({
         region: this.configService.get<string>('storage.ossRegion') ?? 'oss-cn-hangzhou',
         accessKeyId: this.configService.get<string>('storage.ossAccessKeyId') ?? '',
         accessKeySecret: this.configService.get<string>('storage.ossAccessKeySecret') ?? '',
         bucket: this.bucket,
         endpoint: this.configService.get<string>('storage.ossEndpoint') || undefined,
       });
+      console.log(`[OSS] Connected to bucket ${this.bucket}`);
     } catch (err) {
       console.error('OSS init failed, falling back to local storage:', err.message);
       this.storageType = 'local';

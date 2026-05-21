@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "xcai",
-      "version": "1.0.1+2",
+      "version": "1.0.2+3",
       "dependencies": [
         "audioplayers",
         "cached_network_image",
