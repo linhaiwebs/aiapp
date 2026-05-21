@@ -112,7 +112,7 @@
 <div class="card">
   <div class="logo">&#9729;</div>
   <h1>端云智采</h1>
-  <p class="version">数据采集众包平台 · v1.0.0</p>
+  <p class="version" id="version">数据采集众包平台 · 加载中...</p>
 
   <div class="features">
     <div class="feature"><span class="dot"></span>团队协作 · 任务广场</div>
@@ -123,7 +123,7 @@
 
   <p class="size-info">Android APK · 约 54 MB</p>
 
-  <a class="download-btn" href="/dist/端云智采.apk" download>
+  <a class="download-btn" href="/dist/app-release.apk" download>
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
       <polyline points="7 10 12 15 17 10"/>
@@ -134,5 +134,15 @@
 
   <p class="footer">适用于 Android 8.0+ 设备</p>
 </div>
+<script>
+  fetch('/api/app/version')
+    .then(r => r.json())
+    .then(d => {
+      document.getElementById('version').textContent = '数据采集众包平台 · v' + (d.version || '1.0');
+    })
+    .catch(() => {
+      document.getElementById('version').textContent = '数据采集众包平台 · v1.0';
+    });
+</script>
 </body>
 </html>

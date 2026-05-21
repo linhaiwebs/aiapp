@@ -24,6 +24,9 @@ COPY --from=server-builder /app/dist ./dist
 # Admin static files (baked into image)
 COPY --from=admin-builder /admin/dist ./public/admin
 
+# Copy dist download page
+COPY server/public/dist ./public/dist
+
 # Data directory for SQLite DB and local uploads (when using local storage)
 RUN mkdir -p /app/data/uploads /app/public/app
 VOLUME ["/app/data"]

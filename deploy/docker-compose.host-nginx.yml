@@ -71,9 +71,8 @@ services:
       - OSS_CDN_DOMAIN=${OSS_CDN_DOMAIN:-}
     volumes:
       - server_data:/app/data
-      # 可选：挂载自定义 admin/app 覆盖镜像内置的（一般不需要，Docker 构建时已包含）
-      # - ../admin/dist:/app/public/admin
-      # - ../app/build/web:/app/public/app
+      # APK 下载目录（放 app-release.apk 到这里即可更新）
+      - ../server/public/dist:/app/public/dist
     depends_on:
       postgres:
         condition: service_healthy
