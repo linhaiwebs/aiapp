@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import '../network/dio_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -91,6 +92,71 @@ class FileService {
     return completeRes;
   }
 
+  /// 智能上传（字节流版本，Web & 原生通用）
+  Future<Map<String, dynamic>> simpleUploadBytes({
+    required String fileName,
+    required Uint8List bytes,
+    String? taskId,
+    String? taskType,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    final fileSize = bytes.length;
+    final mimeType = _mimeFromExt(fileName);
+
+    final initRes = await initUpload(
+      originalName: fileName,
+      fileSize: fileSize,
+      mimeType: mimeType,
+      taskId: taskId,
+      taskType: taskType,
+      totalChunks: 1,
+    );
+
+    final fileId = initRes['id'] as String;
+    final presignedUrl = initRes['presignedUrl'] as String?;
+
+    if (presignedUrl != null) {
+      await _putToOssBytes(presignedUrl, bytes, mimeType, onProgress);
+    } else {
+      final formData = FormData.fromMap({
+        'fileId': fileId,
+        'chunkIndex': 0,
+        'chunk': MultipartFile.fromBytes(bytes, filename: fileName),
+      });
+      await _client.dio.post('/files/chunk', data: formData,
+        onSendProgress: onProgress,
+      );
+    }
+
+    final completeRes = await completeUpload(fileId);
+    return completeRes;
+  }
+
+  /// PUT 字节流到 OSS 预签名 URL
+  Future<void> _putToOssBytes(
+    String presignedUrl,
+    Uint8List bytes,
+    String mimeType,
+    void Function(int sent, int total)? onProgress,
+  ) async {
+    final ossDio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 60),
+      receiveTimeout: const Duration(seconds: 60),
+    ));
+
+    await ossDio.put(
+      presignedUrl,
+      data: Stream.fromIterable([bytes]),
+      options: Options(
+        headers: {
+          'Content-Type': mimeType,
+          'Content-Length': bytes.length,
+        },
+      ),
+      onSendProgress: onProgress,
+    );
+  }
+
   /// PUT 文件到 OSS 预签名 URL
   Future<void> _putToOss(
     String presignedUrl,
@@ -124,6 +190,7 @@ class FileService {
     final ext = fileName.split('.').last.toLowerCase();
     switch (ext) {
       case 'wav': return 'audio/wav';
+      case 'opus': return 'audio/opus';
       case 'mp3': return 'audio/mpeg';
       case 'm4a': return 'audio/mp4';
       case 'aac': return 'audio/aac';

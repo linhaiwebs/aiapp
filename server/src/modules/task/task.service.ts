@@ -156,12 +156,19 @@ export class TaskService {
   }
 
   async remove(id: string): Promise<void> {
-    const task = await this.findOne(id);
-    await this.taskRepository.remove(task);
+    // 级联清理：文本采集 → 认领记录 → 任务
+    await this.textCollectionRepository.delete({ taskId: id });
+    await this.claimRepository.delete({ taskId: id });
+    await this.taskRepository.delete(id);
   }
 
   async batchRemove(ids: string[]): Promise<void> {
     if (!ids?.length) throw new BadRequestException('请提供要删除的ID列表');
+    // 级联清理
+    for (const taskId of ids) {
+      await this.textCollectionRepository.delete({ taskId } as any);
+      await this.claimRepository.delete({ taskId } as any);
+    }
     await this.taskRepository.delete(ids);
   }
 
@@ -253,8 +260,8 @@ export class TaskService {
       await this.taskRepository.save(task);
     }
 
-    // 文本任务：已领取用户自动从 PENDING 文本池中按顺序分配
-    if (claimStatus === ClaimStatus.CLAIMED && task.type === TaskType.TEXT) {
+    // 文本/语音任务：已领取用户自动从 PENDING 文本池中按顺序分配
+    if (claimStatus === ClaimStatus.CLAIMED && (task.type === TaskType.TEXT || (task.type as string) === 'audio')) {
       await this.autoAssignTextsForClaim(task, saved);
     }
 
@@ -273,12 +280,35 @@ export class TaskService {
       });
       perUserCount = Math.ceil(totalPending / Number(task.textAssignCount));
     } else {
-      // auto 模式或未设置：按 claimedQuantity 动态均分
+      // auto 模式：为当前用户复制全部文本（每人全量）
+      if ((task.textAssignMode || 'auto') === 'auto') {
+        const allTexts = await this.textCollectionRepository.find({
+          where: { taskId: task.id, status: In([TextStatus.PENDING, TextStatus.ASSIGNED]) },
+          order: { sortOrder: 'ASC' },
+        });
+        if (allTexts.length === 0) return;
+
+        const copies = allTexts.map((text) =>
+          this.textCollectionRepository.create({
+            taskId: text.taskId,
+            content: text.content,
+            format: text.format,
+            templateId: text.templateId,
+            sortOrder: text.sortOrder,
+            assignedUserId: claim.userId,
+            assignedAt: new Date(),
+            status: TextStatus.ASSIGNED,
+          }),
+        );
+        await this.textCollectionRepository.save(copies);
+        return;
+      }
+
+      // 其他模式：按 claimedQuantity 动态均分
       const totalPending = await this.textCollectionRepository.count({
         where: { taskId: task.id, status: TextStatus.PENDING },
       });
       if (totalPending === 0) return;
-      // claimedQuantity 已经 +1，以此为分母
       const totalAssignees = Number(task.claimedQuantity) || 1;
       const totalTexts = totalPending + (await this.textCollectionRepository.count({
         where: { taskId: task.id, status: TextStatus.ASSIGNED },
@@ -332,6 +362,37 @@ export class TaskService {
     await this.taskRepository.save(task);
 
     return claim;
+  }
+
+  /** 管理员删除认领记录 */
+  async removeClaim(claimId: string): Promise<void> {
+    const claim = await this.claimRepository.findOne({
+      where: { id: claimId },
+      relations: ['task'],
+    });
+    if (!claim) throw new NotFoundException('认领记录不存在');
+
+    // 如果任务有 claimedQuantity 且状态为已领取/采集中，需要回退
+    if (
+      claim.task &&
+      (claim.status === ClaimStatus.CLAIMED || claim.status === ClaimStatus.IN_PROGRESS)
+    ) {
+      await this.taskRepository.decrement(
+        { id: claim.taskId },
+        'claimedQuantity',
+        1,
+      );
+    }
+
+    // 清除该认领关联的文本分配
+    if ((claim.task?.type as string) === 'text') {
+      await this.textCollectionRepository.update(
+        { taskId: claim.taskId, assignedUserId: claim.userId, status: TextStatus.ASSIGNED },
+        { assignedUserId: null as any, assignedAt: null as any, status: TextStatus.PENDING },
+      );
+    }
+
+    await this.claimRepository.remove(claim);
   }
 
   /** 审核员拒绝任务申请 */
@@ -391,6 +452,9 @@ export class TaskService {
   }
 
   async getUserClaims(userId: string, status?: ClaimStatus) {
+    // 先清理孤儿认领（关联任务已被删除的）
+    await this.cleanOrphanClaims();
+
     const where: FindOptionsWhere<TaskClaim> = { userId };
     if (status) where.status = status;
 
@@ -399,6 +463,20 @@ export class TaskService {
       relations: ['task'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /** 清理关联任务已被删除的孤儿认领记录 */
+  async cleanOrphanClaims(): Promise<number> {
+    const orphanClaims = await this.claimRepository
+      .createQueryBuilder('claim')
+      .leftJoin('claim.task', 'task')
+      .where('task.id IS NULL')
+      .getMany();
+
+    if (orphanClaims.length > 0) {
+      await this.claimRepository.remove(orphanClaims);
+    }
+    return orphanClaims.length;
   }
 
   async search(keyword: string, page = 1, pageSize = 20, userId?: string, userRole?: string) {
@@ -459,6 +537,8 @@ export class TaskService {
     page = 1, pageSize = 20,
     filters?: { status?: string; teamId?: string; userId?: string; taskId?: string },
   ) {
+    await this.cleanOrphanClaims();
+
     const queryBuilder = this.claimRepository
       .createQueryBuilder('claim')
       .leftJoinAndSelect('claim.task', 'task')

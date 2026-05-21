@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Space, Card, message, Modal } from 'antd';
-import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Card, message, Modal, Popconfirm } from 'antd';
+import { CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
 import { taskApi } from '../../api';
 
 export default function ClaimApprovals() {
@@ -42,6 +42,14 @@ export default function ClaimApprovals() {
         } catch { message.error('操作失败'); }
       },
     });
+  };
+
+  const handleDelete = async (claimId: string) => {
+    try {
+      await taskApi.deleteClaim(claimId);
+      message.success('已删除');
+      loadClaims();
+    } catch { message.error('删除失败'); }
   };
 
   const handleClearAll = () => {
@@ -86,6 +94,9 @@ export default function ClaimApprovals() {
           <Button danger size="small" icon={<CloseOutlined />} onClick={() => handleReject(record.id)}>
             拒绝
           </Button>
+          <Popconfirm title="确认删除？" onConfirm={() => handleDelete(record.id)}>
+            <Button size="small" icon={<DeleteOutlined />} />
+          </Popconfirm>
         </Space>
       ),
     },

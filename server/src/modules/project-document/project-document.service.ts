@@ -4,6 +4,21 @@ import { Repository } from 'typeorm';
 import { ProjectDocument } from '../../entities/project-document.entity';
 import { CreateProjectDocumentDto, BatchCreateProjectDocumentDto } from './dto';
 
+/** Multer 在某些环境下会将 UTF-8 文件名按 latin1 解码，用此函数修复 */
+function safeUtf8Decode(name: string): string {
+  try {
+    // 检测是否已经是合法的 UTF-8（包含 CJK 字符则大概率正确）
+    if (/[一-鿿]/.test(name)) return name;
+    // 尝试从 latin1 重新解码为 UTF-8
+    const decoded = Buffer.from(name, 'latin1').toString('utf8');
+    // 如果解码后包含 CJK 字符，说明修复有效
+    if (name !== decoded && /[一-鿿]/.test(decoded)) return decoded;
+    return name;
+  } catch {
+    return name;
+  }
+}
+
 @Injectable()
 export class ProjectDocumentService {
   constructor(
@@ -19,7 +34,7 @@ export class ProjectDocumentService {
   async createFromFile(projectId: string, file: Express.Multer.File): Promise<ProjectDocument> {
     if (!file) throw new BadRequestException('请上传文件');
 
-    const originalName = file.originalname;
+    const originalName = safeUtf8Decode(file.originalname);
     const ext = originalName.split('.').pop()?.toLowerCase();
     const title = originalName.replace(/\.[^.]+$/, '');
 

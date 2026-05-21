@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -101,13 +104,11 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         }
       }
 
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.wav';
-
-      await _recorder.start(
-        const RecordConfig(encoder: AudioEncoder.wav),
-        path: path,
-      );
+      final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);
+      final path = kIsWeb
+          ? 'rec_${DateTime.now().millisecondsSinceEpoch}.opus'
+          : '${(await getTemporaryDirectory()).path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
+      await _recorder.start(config, path: path);
 
       setState(() {
         _isRecording = true;
@@ -133,12 +134,20 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
     try {
       final path = await _recorder.stop();
       if (path != null && path.isNotEmpty) {
-        final file = File(path);
-        if (await file.exists()) {
-          final duration = _recordingDuration;
-          setState(() { _isRecording = false; _recordingDuration = Duration.zero; });
-          await _uploadFile(path, source: '录音_${_collectedFiles.length + 1}.wav', duration: duration);
-          return;
+        final duration = _recordingDuration;
+        setState(() { _isRecording = false; _recordingDuration = Duration.zero; });
+
+        if (kIsWeb) {
+          // Web: 录音数据是 blob URL，用 Dio 获取字节
+          final dio = Dio();
+          final bytes = (await dio.get(path, options: Options(responseType: ResponseType.bytes))).data as Uint8List;
+          await _uploadFileBytes(bytes, '录音_${_collectedFiles.length + 1}.opus', duration: duration);
+        } else {
+          final file = File(path);
+          if (await file.exists()) {
+            await _uploadFileNative(path, source: '录音_${_collectedFiles.length + 1}.opus', duration: duration);
+            return;
+          }
         }
       }
       setState(() { _isRecording = false; _recordingDuration = Duration.zero; });
@@ -169,8 +178,12 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
       );
       if (result != null && result.files.isNotEmpty) {
         for (final file in result.files) {
-          if (file.path != null) {
-            await _uploadFile(file.path!, source: file.name);
+          if (kIsWeb) {
+            if (file.bytes != null) {
+              await _uploadFileBytes(file.bytes!, file.name);
+            }
+          } else if (file.path != null) {
+            await _uploadFileNative(file.path!, source: file.name);
           }
         }
       }
@@ -183,14 +196,13 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
     }
   }
 
-  Future<void> _uploadFile(String filePath, {String source = '', Duration? duration}) async {
+  Future<void> _uploadFileNative(String filePath, {String source = '', Duration? duration}) async {
     final fileName = source.isNotEmpty ? source : filePath.split('/').last;
     setState(() {
       _isUploading = true;
       _uploadProgress = 0;
       _uploadingFileName = fileName;
     });
-    // Show progress dialog overlay
     _showProgressDialog(fileName);
     try {
       final result = await ref.read(fileServiceProvider).simpleUpload(
@@ -204,9 +216,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         },
       );
       final fileId = result['id'] as String;
-      final file = File(filePath);
-      final size = await file.length();
-      // Dismiss progress dialog
+      final size = await File(filePath).length();
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
       if (mounted) {
         setState(() {
@@ -225,13 +235,61 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         );
       }
     } catch (e) {
-      // Dismiss progress dialog
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
       if (mounted) {
         setState(() {
           _isUploading = false;
           _uploadProgress = 0;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('上传失败: $e'), backgroundColor: AppColors.error),
+        );
+      }
+    }
+  }
+
+  /// Web 端上传：使用字节流
+  Future<void> _uploadFileBytes(Uint8List bytes, String fileName, {Duration? duration}) async {
+    setState(() {
+      _isUploading = true;
+      _uploadProgress = 0;
+      _uploadingFileName = fileName;
+    });
+    _showProgressDialog(fileName);
+    try {
+      final result = await ref.read(fileServiceProvider).simpleUploadBytes(
+        fileName: fileName,
+        bytes: bytes,
+        taskId: _claim?.taskId,
+        taskType: _claim?.taskType ?? 'audio',
+        onProgress: (sent, total) {
+          if (mounted && total > 0) {
+            setState(() => _uploadProgress = sent / total);
+          }
+        },
+      );
+      final fileId = result['id'] as String;
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        setState(() {
+          _collectedFiles.add(_CollectedFile(
+            id: fileId,
+            name: fileName,
+            size: bytes.length,
+            duration: duration,
+            type: duration != null ? _FileType.recorded : _FileType.uploaded,
+          ));
+          _isUploading = false;
+          _uploadProgress = 0;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$fileName 上传成功'), backgroundColor: AppColors.secondary),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        setState(() { _isUploading = false; _uploadProgress = 0; });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('上传失败: $e'), backgroundColor: AppColors.error),
         );
@@ -292,7 +350,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   void _previewFile(String fileId, String name) {
     final serverBase = ref.read(dioProvider).dio.options.baseUrl;
     final url = '$serverBase/files/$fileId/stream';
-    final isAudio = name.endsWith('.wav') || name.endsWith('.mp3') || name.endsWith('.m4a') || name.endsWith('.aac');
+    final isAudio = name.endsWith('.wav') || name.endsWith('.mp3') || name.endsWith('.m4a') || name.endsWith('.aac') || name.endsWith('.opus');
 
     if (!isAudio) {
       showModalBottomSheet(
@@ -708,7 +766,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
   Widget _buildFileCard(int index) {
     final f = _collectedFiles[index];
     final isRecorded = f.type == _FileType.recorded;
-    final isAudio = isRecorded || f.name.endsWith('.wav') || f.name.endsWith('.mp3') || f.name.endsWith('.m4a') || f.name.endsWith('.ogg');
+    final isAudio = isRecorded || f.name.endsWith('.wav') || f.name.endsWith('.mp3') || f.name.endsWith('.m4a') || f.name.endsWith('.ogg') || f.name.endsWith('.opus');
     final isVideo = f.name.endsWith('.mp4') || f.name.endsWith('.mov') || f.name.endsWith('.avi');
     final canPlay = isAudio || isVideo;
 

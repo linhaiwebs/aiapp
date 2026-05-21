@@ -81,7 +81,9 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: const Text('节省移动数据流量'),
               value: _wifiOnly,
               onChanged: _setWifiOnly,
-              activeThumbColor: AppColors.primary,
+              thumbColor: WidgetStateProperty.resolveWith<Color?>(
+                (Set<WidgetState> states) => states.contains(WidgetState.selected) ? AppColors.primary : null,
+              ),
               contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding.w),
             ),
           ]),
@@ -126,7 +128,9 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: const Text('接收任务更新和系统消息'),
               value: _notification,
               onChanged: _setNotification,
-              activeThumbColor: AppColors.primary,
+              thumbColor: WidgetStateProperty.resolveWith<Color?>(
+                (Set<WidgetState> states) => states.contains(WidgetState.selected) ? AppColors.primary : null,
+              ),
               contentPadding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding.w),
             ),
           ]),

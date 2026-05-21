@@ -51,6 +51,7 @@ export enum QcMethod {
 export enum AudioFormat {
   WAV = 'wav',
   PCM = 'pcm',
+  OPUS = 'opus',
 }
 
 export enum AudioChannel {
@@ -66,9 +67,9 @@ export enum SampleRate {
 
 /** 文本分配模式 */
 export enum TextAssignMode {
-  /** 自动分配（均分给所有已领取用户） */
+  /** 自动分配：每人获取全部文本（可多次领取） */
   AUTO = 'auto',
-  /** 平均分配：指定N个人，均分所有文本 */
+  /** 平均分配：按领取顺序，第一人取前N条，第二人取后续，以此类推 */
   EVEN = 'even',
   /** 每人指定：每人固定X条 */
   PER_USER = 'per_user',

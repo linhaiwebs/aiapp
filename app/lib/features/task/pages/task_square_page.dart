@@ -18,6 +18,7 @@ class TaskSquarePage extends ConsumerStatefulWidget {
 
 class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
   List<TaskModel> _tasks = [];
+  Set<String> _claimedTaskIds = {};
   String? _typeFilter;
   bool _isLoading = true;
   String? _claimingTaskId;
@@ -36,8 +37,14 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
       if (extra is Map && extra['type'] is String && _typeFilter == null) {
         _typeFilter = extra['type'] as String;
       }
-      final tasks = await ref.read(taskServiceProvider).findAll(type: _typeFilter);
-      if (mounted) setState(() { _tasks = tasks; _isLoading = false; });
+      final results = await Future.wait([
+        ref.read(taskServiceProvider).findAll(type: _typeFilter),
+        ref.read(taskServiceProvider).getMyClaims(),
+      ]);
+      final tasks = results[0] as List<TaskModel>;
+      final claims = results[1] as List;
+      final claimedIds = claims.map((c) => (c as dynamic).taskId as String).toSet();
+      if (mounted) setState(() { _tasks = tasks; _claimedTaskIds = claimedIds; _isLoading = false; });
     } catch (_) {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -56,7 +63,13 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
       }
     } catch (e) {
       if (mounted) {
-        final msg = e.toString();
+        String msg = e.toString();
+        // Try to extract server error message from DioException
+        try {
+          final dioErr = e as dynamic;
+          final serverMsg = dioErr.response?.data?.message;
+          if (serverMsg is String && serverMsg.isNotEmpty) msg = serverMsg;
+        } catch (_) {}
         String userMsg = '领取失败，请稍后重试';
         if (msg.contains('已申请') || msg.contains('已领取')) {
           userMsg = '您已领取过该任务，可在"我的任务"中查看';
@@ -72,11 +85,6 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
           userMsg = '任务已被领完';
         } else if (msg.contains('封禁')) {
           userMsg = '账号已被封禁，无法申请任务';
-        } else if (msg.contains('Exception') || msg.contains('Error')) {
-          final start = msg.indexOf(': ');
-          if (start > 0) {
-            userMsg = msg.substring(start + 2);
-          }
         }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(userMsg), backgroundColor: AppColors.error),
@@ -228,6 +236,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
         ? (task.claimedQuantity / task.totalQuantity).clamp(0.0, 1.0)
         : 0.0;
     final isClaiming = _claimingTaskId == task.id;
+    final isClaimed = _claimedTaskIds.contains(task.id);
 
     return Container(
       margin: EdgeInsets.only(bottom: AppSpacing.listGap.h),
@@ -255,7 +264,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
             color: Colors.transparent,
             borderRadius: BorderRadius.circular(AppRadius.md.r),
             child: InkWell(
-              onTap: () => _claimTask(task),
+              onTap: isClaimed ? null : () => _claimTask(task),
               borderRadius: BorderRadius.circular(AppRadius.md.r),
               child: Padding(
                 padding: EdgeInsets.all(AppSpacing.cardPadding.w),
@@ -313,25 +322,41 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
                     ),
                     SizedBox(height: AppSpacing.sm.h),
                     GestureDetector(
-                      onTap: () => _claimTask(task),
+                      onTap: isClaimed ? null : () => _claimTask(task),
                       child: Container(
                         width: double.infinity,
                         padding: EdgeInsets.symmetric(vertical: AppSpacing.sm.h),
                         decoration: BoxDecoration(
-                          color: isClaiming
-                              ? AppColors.primary.withValues(alpha: 0.06)
-                              : AppColors.primary.withValues(alpha: 0.12),
+                          color: isClaimed
+                              ? AppColors.secondary.withValues(alpha: 0.08)
+                              : isClaiming
+                                  ? AppColors.primary.withValues(alpha: 0.06)
+                                  : AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(AppRadius.sm.r),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 1),
+                          border: Border.all(
+                            color: isClaimed
+                                ? AppColors.secondary.withValues(alpha: 0.3)
+                                : AppColors.primary.withValues(alpha: 0.3),
+                            width: 1,
+                          ),
                         ),
                         child: Center(
-                          child: isClaiming
-                              ? SizedBox(
-                                  width: 20.w,
-                                  height: 20.w,
-                                  child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                          child: isClaimed
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.check_circle, size: 16.sp, color: AppColors.secondary),
+                                    SizedBox(width: 6.w),
+                                    Text('已领取', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.secondary)),
+                                  ],
                                 )
-                              : Text('领取任务', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                              : isClaiming
+                                  ? SizedBox(
+                                      width: 20.w,
+                                      height: 20.w,
+                                      child: const CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                    )
+                                  : Text('领取任务', style: TextStyle(fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.primary)),
                         ),
                       ),
                     ),

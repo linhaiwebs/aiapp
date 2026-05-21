@@ -21,9 +21,9 @@ export default function TaskForm() {
 
   // 多人分配相关
   const assignMode: string = Form.useWatch('textAssignMode', form) || 'auto';
-  const assignTotal: number = Form.useWatch('totalQuantity', form) || 0;
+  const docLineCount: number = Form.useWatch('_docLineCount', form) || 0;
   const assignPeople: number = Form.useWatch('textAssignCount', form) || 0;
-  const evenPreview = assignPeople > 0 ? Math.ceil(assignTotal / assignPeople) : 0;
+  const evenPreview = assignPeople > 0 ? Math.ceil(docLineCount / assignPeople) : 0;
 
   useEffect(() => {
     if (assignMode !== 'even') form.setFieldsValue({ textAssignCount: undefined });
@@ -70,6 +70,10 @@ export default function TaskForm() {
       const res: any = await projectDocumentApi.detail(projectId, docId);
       if (res?.content) {
         form.setFieldsValue({ instructions: res.content });
+        // 计算文本行数（非空行）
+        const lines = res.content.split('\n').filter((l: string) => l.trim());
+        form.setFieldsValue({ _docLineCount: lines.length });
+        message.info(`文档共 ${lines.length} 行文本，将自动作为任务总数量`);
       }
     } catch {
       message.error('加载文档内容失败');
@@ -86,6 +90,7 @@ export default function TaskForm() {
         deadline: res.deadline ? dayjs(res.deadline) : undefined,
         categoryId: res.category?.id,
         projectId: res.project?.id,
+        _docLineCount: res.totalQuantity || 0,
       });
     } catch {
       message.error('加载任务失败');
@@ -97,9 +102,15 @@ export default function TaskForm() {
   const onFinish = async (values: any) => {
     setLoading(true);
     try {
+      // 从文档行数计算 totalQuantity
+      if (values._docLineCount && !values.totalQuantity) {
+        values.totalQuantity = values._docLineCount;
+      }
       const cleaned = Object.fromEntries(
         Object.entries(values).filter(([, v]) => v !== null && v !== undefined && v !== ''),
       );
+      // Remove the fake form field (not a real DB column)
+      delete cleaned._docLineCount;
       const data: any = {
         ...cleaned,
         deadline: (cleaned.deadline as dayjs.Dayjs)?.toISOString(),
@@ -125,12 +136,29 @@ export default function TaskForm() {
         data.status = 'in_progress';
       }
 
+      let savedTask: any;
       if (isEdit) {
-        await taskApi.update(id!, data);
+        savedTask = await taskApi.update(id!, data);
         message.success('更新成功');
+        // 更新已有任务的文本：删除旧的，重新创建
+        const lines = (data.instructions || '').split('\n').filter((l: string) => l.trim());
+        if (lines.length > 0) {
+          try {
+            await textCollectionApi.batchCreate({ taskId: id!, texts: lines });
+            message.success(`已同步 ${lines.length} 条文本`);
+          } catch { /* 非阻塞 */ }
+        }
       } else {
-        await taskApi.create(data);
+        savedTask = await taskApi.create(data);
         message.success('创建成功');
+        // 自动从任务说明创建文本采集条目
+        const lines = (data.instructions || '').split('\n').filter((l: string) => l.trim());
+        if (lines.length > 0) {
+          try {
+            await textCollectionApi.batchCreate({ taskId: savedTask.id, texts: lines });
+            message.success(`已自动创建 ${lines.length} 条文本`);
+          } catch { /* 非阻塞 */ }
+        }
       }
       navigate('/tasks');
     } catch (e: any) {
@@ -280,15 +308,15 @@ export default function TaskForm() {
                         </Form.Item>
                       </Col>
                       <Col span={8}>
-                        <Form.Item name="totalQuantity" label="总数量" tooltip="任务需要采集的总条数" rules={[{ required: true }]}>
-                          <InputNumber min={1} style={{ width: '100%' }} />
+                        <Form.Item name="_docLineCount" label="文本行数" tooltip="从项目文档自动计算的行数，或手动输入">
+                          <InputNumber min={1} style={{ width: '100%' }} disabled placeholder="选择文档后自动填充" />
                         </Form.Item>
                       </Col>
                     </Row>
 
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="maxClaimsPerUser" label="每人限领" tooltip="每个采集员最多可领取的任务数量">
+                        <Form.Item name="maxClaimsPerUser" label="可领取次数" tooltip="每个采集员最多可领取该任务的次数（每次领取获得一批文本）">
                           <InputNumber min={1} style={{ width: '100%' }} />
                         </Form.Item>
                       </Col>
@@ -404,7 +432,7 @@ export default function TaskForm() {
                   <>
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="allowMultipleClaims" label="允许多次领取" valuePropName="checked" tooltip="开启后允许同一采集员多次领取该任务">
+                        <Form.Item name="allowMultipleClaims" label="允许多次领取" valuePropName="checked" tooltip="开启后允许采集员多次领取，配合「可领取次数」控制上限">
                           <Switch />
                         </Form.Item>
                       </Col>
@@ -419,11 +447,11 @@ export default function TaskForm() {
 
                     <Row gutter={16}>
                       <Col span={8}>
-                        <Form.Item name="textAssignMode" label="分配模式" tooltip="文本多人分配的策略模式">
+                        <Form.Item name="textAssignMode" label="分配模式" tooltip="auto=每人全量（可多次领取）| even=按顺序均分 | per_user=每人固定条数">
                           <Select
                             options={[
-                              { label: '自动分配', value: 'auto' },
-                              { label: '平均分配（指定人数）', value: 'even' },
+                              { label: '自动分配（每人全量）', value: 'auto' },
+                              { label: '平均分配（按领取顺序）', value: 'even' },
                               { label: '每人指定数量', value: 'per_user' },
                             ]}
                           />
@@ -433,8 +461,8 @@ export default function TaskForm() {
                       {assignMode === 'even' && (
                         <>
                           <Col span={6}>
-                            <Form.Item name="textAssignCount" label="分配人数" tooltip="将文本平均分配给指定数量的采集员" rules={[{ required: true, message: '请输入分配人数' }]}>
-                              <InputNumber min={1} style={{ width: '100%' }} placeholder="如：10" />
+                            <Form.Item name="textAssignCount" label="分配人数" tooltip="文档行数÷人数=每人条数，按领取顺序分配" rules={[{ required: true, message: '请输入分配人数' }]}>
+                              <InputNumber min={1} style={{ width: '100%' }} placeholder="如：100" />
                             </Form.Item>
                           </Col>
                           <Col span={6}>
@@ -481,11 +509,12 @@ export default function TaskForm() {
                     <>
                       <Row gutter={16}>
                         <Col span={8}>
-                          <Form.Item name="audioFormat" label="音频格式" tooltip="输出音频文件格式：WAV无损 / PCM原始格式">
+                          <Form.Item name="audioFormat" label="音频格式" tooltip="输出音频文件格式：WAV无损 / PCM原始 / Opus压缩（推荐语音采集）">
                             <Select
                               options={[
                                 { label: 'WAV', value: 'wav' },
                                 { label: 'PCM', value: 'pcm' },
+                                { label: 'Opus', value: 'opus' },
                               ]}
                             />
                           </Form.Item>

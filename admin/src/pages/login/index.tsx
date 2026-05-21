@@ -63,6 +63,11 @@ export default function Login() {
       message.error('登录返回数据异常');
       return;
     }
+    // 仅管理员和团长可登录管理后台
+    if (user.role !== 'super_admin' && user.role !== 'leader') {
+      message.error('无权限访问管理后台，仅管理员和团长可登录');
+      return;
+    }
     login(accessToken, refreshToken, user);
     message.success('登录成功');
     navigate('/dashboard', { replace: true });

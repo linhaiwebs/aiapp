@@ -164,12 +164,13 @@ class AppShadows {
 class AppTheme {
   AppTheme._();
 
-  static const _fontFamily = 'Inter';
+  static const _fontFamily = 'Microsoft YaHei';
 
   static final darkTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.dark,
     fontFamily: _fontFamily,
+    fontFamilyFallback: const ['Microsoft YaHei', 'SimHei', 'PingFang SC', 'sans-serif'],
     primaryColor: AppColors.primary,
     scaffoldBackgroundColor: AppColors.background,
     colorScheme: const ColorScheme.dark(

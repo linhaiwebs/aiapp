@@ -192,6 +192,16 @@ export class TaskController {
     return this.taskService.approveClaim(claimId, reviewerId);
   }
 
+  @Delete('claims/:claimId')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '删除认领记录（管理员）' })
+  async removeClaim(@Param('claimId') claimId: string) {
+    await this.taskService.removeClaim(claimId);
+    return { message: '已删除' };
+  }
+
   @Post('claims/:claimId/reject')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()

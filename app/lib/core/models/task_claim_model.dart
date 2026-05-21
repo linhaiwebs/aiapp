@@ -33,6 +33,7 @@ class TaskClaimModel {
   final String? taskType; // from joined task: audio, text, image, video
   final String? taskTitle; // from joined task
   final String? taskDescription; // from joined task
+  final String? taskInstructions; // from joined task
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -51,6 +52,7 @@ class TaskClaimModel {
     this.taskType,
     this.taskTitle,
     this.taskDescription,
+    this.taskInstructions,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -78,6 +80,7 @@ class TaskClaimModel {
         taskType: json['task']?['type'] as String?,
         taskTitle: json['task']?['title'] as String?,
         taskDescription: json['task']?['description'] as String?,
+        taskInstructions: json['task']?['instructions'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
       );

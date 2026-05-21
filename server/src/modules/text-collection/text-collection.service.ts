@@ -168,7 +168,6 @@ export class TextCollectionService {
 
   async assignTexts(dto: AssignTextDto): Promise<{ assigned: number }> {
     if (dto.autoAssign) {
-      // Auto-assign: get all unassigned texts for the task
       const taskId = dto.textIds?.[0]
         ? (await this.textRepository.findOne({ where: { id: dto.textIds[0] } }))?.taskId
         : undefined;
@@ -178,60 +177,86 @@ export class TextCollectionService {
       const [unassignedTexts, task] = await Promise.all([
         this.textRepository.find({
           where: { taskId, status: TextStatus.PENDING },
+          order: { sortOrder: 'ASC' },
         }),
         this.taskRepository.findOne({ where: { id: taskId } }),
       ]);
 
       if (unassignedTexts.length === 0) throw new BadRequestException('没有待分配的文本');
 
-      // Get users who claimed the task
       const claims = await this.claimRepository.find({
         where: { taskId, status: In([ClaimStatus.CLAIMED, ClaimStatus.IN_PROGRESS]) },
+        order: { createdAt: 'ASC' },
       });
 
       if (claims.length === 0) throw new BadRequestException('没有可分配的用户');
 
-      // Determine per-user count based on task.textAssignMode:
-      // even   = 平均分配：textAssignCount=人数，文本总数/人数=每人条数
-      // per_user = 每人指定：textPerUserCount=每人固定条数
-      // auto   = 均分给所有已领取用户（默认）
       const mode = task?.textAssignMode || 'auto';
-      const assignCount = dto.assignCount || task?.textAssignCount || 0;
-      const perUserCount = dto.perUserCount || task?.textPerUserCount || 0;
-      let perUser: number;
+      const total = unassignedTexts.length;
 
-      if (mode === 'per_user' && perUserCount > 0) {
-        // 每人指定X条模式
-        perUser = perUserCount;
-      } else if (mode === 'even' && assignCount > 0) {
-        // 平均分配：指定N个人，均分所有文本
-        perUser = Math.ceil(unassignedTexts.length / assignCount);
-      } else if (perUserCount > 0) {
-        // 兼容旧逻辑：dto.perUserCount 或 task.textPerUserCount
-        perUser = perUserCount;
-      } else if (assignCount > 0) {
-        // 兼容旧逻辑：dto.assignCount 或 task.textAssignCount
-        perUser = Math.ceil(unassignedTexts.length / assignCount);
-      } else {
-        // 默认：均分给所有已领取用户
-        perUser = Math.ceil(unassignedTexts.length / claims.length);
-      }
-
-      let textIndex = 0;
-      for (const claim of claims) {
-        const textsForUser = unassignedTexts.slice(textIndex, textIndex + perUser);
-        if (textsForUser.length === 0) break;
-        for (const text of textsForUser) {
-          text.assignedUserId = claim.userId;
-          text.assignedAt = new Date();
-          text.status = TextStatus.ASSIGNED;
+      if (mode === 'even') {
+        // 平均分配：按领取顺序，第一人取前 N 条，第二人取后续 N 条...
+        const assignPeople = task?.textAssignCount || claims.length;
+        const perUser = Math.ceil(total / assignPeople);
+        let textIndex = 0;
+        for (const claim of claims) {
+          const slice = unassignedTexts.slice(textIndex, textIndex + perUser);
+          if (slice.length === 0) break;
+          for (const text of slice) {
+            text.assignedUserId = claim.userId;
+            text.assignedAt = new Date();
+            text.status = TextStatus.ASSIGNED;
+          }
+          textIndex += perUser;
+          if (textIndex >= total) break;
         }
-        textIndex += perUser;
-        if (textIndex >= unassignedTexts.length) break;
+        await this.textRepository.save(unassignedTexts);
+        return { assigned: Math.min(textIndex, total) };
       }
 
-      await this.textRepository.save(unassignedTexts);
-      return { assigned: Math.min(textIndex, unassignedTexts.length) };
+      if (mode === 'per_user') {
+        // 每人固定条数
+        const perUser = task?.textPerUserCount || dto.perUserCount || 0;
+        if (perUser <= 0) throw new BadRequestException('请配置每人条数');
+        let textIndex = 0;
+        for (const claim of claims) {
+          const slice = unassignedTexts.slice(textIndex, textIndex + perUser);
+          if (slice.length === 0) break;
+          for (const text of slice) {
+            text.assignedUserId = claim.userId;
+            text.assignedAt = new Date();
+            text.status = TextStatus.ASSIGNED;
+          }
+          textIndex += perUser;
+          if (textIndex >= total) break;
+        }
+        await this.textRepository.save(unassignedTexts);
+        return { assigned: Math.min(textIndex, total) };
+      }
+
+      // auto 模式：每人获取全部文本（复制分配）
+      for (const claim of claims) {
+        // Skip users who already have texts assigned for this task
+        const existingCount = await this.textRepository.count({
+          where: { taskId, assignedUserId: claim.userId },
+        });
+        if (existingCount > 0) continue;
+
+        const copies = unassignedTexts.map((text) =>
+          this.textRepository.create({
+            taskId: text.taskId,
+            content: text.content,
+            format: text.format,
+            templateId: text.templateId,
+            sortOrder: text.sortOrder,
+            assignedUserId: claim.userId,
+            assignedAt: new Date(),
+            status: TextStatus.ASSIGNED,
+          }),
+        );
+        await this.textRepository.save(copies);
+      }
+      return { assigned: unassignedTexts.length * claims.length };
     }
 
     // Manual assign
@@ -243,7 +268,6 @@ export class TextCollectionService {
     });
 
     if (dto.copyForAssign) {
-      // Copy texts for multiple assignees
       const copies: TextCollection[] = [];
       for (const text of texts) {
         const copy = this.textRepository.create({
@@ -328,10 +352,121 @@ export class TextCollectionService {
     });
     if (!claim) throw new NotFoundException('领取记录不存在或不属于你');
 
+    // 检查是否已有分配的文本
+    const existing = await this.textRepository.find({
+      where: { taskId: claim.taskId, assignedUserId: userId },
+      order: { sortOrder: 'ASC' },
+    });
+
+    if (existing.length > 0) return existing;
+
+    // 首次访问：按任务模式自动分配文本
+    await this.autoAssignForClaim(claim.taskId, userId);
+    // 跳过所属检测，getNextAvailableText 已做了
+
     return this.textRepository.find({
       where: { taskId: claim.taskId, assignedUserId: userId },
       order: { sortOrder: 'ASC' },
     });
+  }
+
+  /** 按 claim 首次访问时自动分配文本 */
+  private async autoAssignForClaim(taskId: string, userId: string): Promise<void> {
+    const task = await this.taskRepository.findOne({ where: { id: taskId } });
+    if (!task) return;
+
+    const mode = task.textAssignMode || 'auto';
+
+    // 获取所有文本（用 queryBuilder 避免 In() 在 sql.js 中的兼容问题）
+    const allTexts = await this.textRepository
+      .createQueryBuilder('text')
+      .where('text.taskId = :taskId', { taskId })
+      .andWhere('text.status IN (:...statuses)', { statuses: [TextStatus.PENDING, TextStatus.ASSIGNED] })
+      .orderBy('text.sortOrder', 'ASC')
+      .getMany();
+
+    if (allTexts.length === 0) return;
+
+    if (mode === 'auto') {
+      // 为当前用户复制全量文本
+      const copies = allTexts.map((text) =>
+        this.textRepository.create({
+          taskId: text.taskId,
+          content: text.content,
+          format: text.format,
+          templateId: text.templateId,
+          sortOrder: text.sortOrder,
+          assignedUserId: userId,
+          assignedAt: new Date(),
+          status: TextStatus.ASSIGNED,
+        }),
+      );
+      await this.textRepository.save(copies);
+      return;
+    }
+
+    if (mode === 'even') {
+      // 按领取顺序分段分配
+      const claims = await this.claimRepository
+        .createQueryBuilder('claim')
+        .where('claim.taskId = :taskId', { taskId })
+        .andWhere('claim.status IN (:...statuses)', { statuses: [ClaimStatus.CLAIMED, ClaimStatus.IN_PROGRESS] })
+        .orderBy('claim.createdAt', 'ASC')
+        .getMany();
+
+      const userIndex = claims.findIndex(c => c.userId === userId);
+      if (userIndex < 0) return;
+
+      const pendingTexts = await this.textRepository
+        .createQueryBuilder('text')
+        .where('text.taskId = :taskId', { taskId })
+        .andWhere('text.status = :status', { status: TextStatus.PENDING })
+        .orderBy('text.sortOrder', 'ASC')
+        .getMany();
+
+      const total = allTexts.length;
+      const assignPeople = task.textAssignCount || claims.length;
+      const perUser = Math.ceil(total / assignPeople);
+
+      const startIdx = userIndex * perUser;
+      const endIdx = Math.min(startIdx + perUser, total);
+
+      const mySlice = pendingTexts.filter(
+        t => t.sortOrder >= startIdx && t.sortOrder < endIdx,
+      );
+
+      if (mySlice.length > 0) {
+        for (const text of mySlice) {
+          text.assignedUserId = userId;
+          text.assignedAt = new Date();
+          text.status = TextStatus.ASSIGNED;
+        }
+        await this.textRepository.save(mySlice);
+      }
+      return;
+    }
+
+    if (mode === 'per_user') {
+      const perUser = task.textPerUserCount || 0;
+      if (perUser <= 0) return;
+
+      const pendingTexts = await this.textRepository
+        .createQueryBuilder('text')
+        .where('text.taskId = :taskId', { taskId })
+        .andWhere('text.status = :status', { status: TextStatus.PENDING })
+        .orderBy('text.sortOrder', 'ASC')
+        .take(perUser)
+        .getMany();
+
+      if (pendingTexts.length > 0) {
+        for (const text of pendingTexts) {
+          text.assignedUserId = userId;
+          text.assignedAt = new Date();
+          text.status = TextStatus.ASSIGNED;
+        }
+        await this.textRepository.save(pendingTexts);
+      }
+    }
   }
 
   /** 更新单条文本的采集状态 */

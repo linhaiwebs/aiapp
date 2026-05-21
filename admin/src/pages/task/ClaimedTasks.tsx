@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Tag, Space, Input, Select, Button, Card, message } from 'antd';
-import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Table, Tag, Space, Input, Select, Button, Card, message, Popconfirm } from 'antd';
+import { SearchOutlined, ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { taskApi, teamApi } from '../../api';
 
@@ -78,6 +78,14 @@ const ClaimedTasks: React.FC = () => {
     fetchData(1, pagination.pageSize);
   };
 
+  const handleDelete = async (claimId: string) => {
+    try {
+      await taskApi.deleteClaim(claimId);
+      message.success('已删除认领记录');
+      fetchData(pagination.current, pagination.pageSize);
+    } catch { message.error('删除失败'); }
+  };
+
   const columns: ColumnsType<ClaimRecord> = [
     {
       title: '认领ID',
@@ -126,6 +134,19 @@ const ClaimedTasks: React.FC = () => {
       dataIndex: 'createdAt',
       width: 170,
       render: (t: string) => new Date(t).toLocaleString(),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 80,
+      render: (_: any, r: ClaimRecord) => (
+        <Popconfirm
+          title="确认删除此认领记录？会同时清除该用户的文本分配"
+          onConfirm={() => handleDelete(r.id)}
+        >
+          <Button type="link" danger icon={<DeleteOutlined />} size="small" />
+        </Popconfirm>
+      ),
     },
   ];
 

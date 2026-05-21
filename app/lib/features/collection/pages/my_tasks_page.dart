@@ -219,7 +219,8 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
             child: isActive
                 ? ElevatedButton(
                     onPressed: () {
-                      if (claim.taskType == 'text') {
+                      // text / audio 类型统一走轮播卡片页面
+                      if (claim.taskType == 'text' || claim.taskType == 'audio') {
                         context.push('/text-carousel/${claim.id}');
                       } else {
                         context.push('/collection/${claim.id}');

@@ -8,8 +8,7 @@ dist/
 
 # Flutter build artifacts
 app/build/
-app/.dart_tool/flutter_build/
-app/.dart_tool/hooks_runner/objective_c/
+app/.dart_tool/
 
 # Server data (SQLite DB, uploads)
 server/data/

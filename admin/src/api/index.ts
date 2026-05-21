@@ -46,6 +46,7 @@ export const taskApi = {
   approvedClaims: (params?: any) => api.get('/tasks/claims/approved', { params }),
   approveClaim: (claimId: string) => api.post(`/tasks/claims/${claimId}/approve`),
   rejectClaim: (claimId: string, reason?: string) => api.post(`/tasks/claims/${claimId}/reject`, { reason }),
+  deleteClaim: (claimId: string) => api.delete(`/tasks/claims/${claimId}`),
   clearAllData: () => api.delete('/tasks/data/all'),
   batchDelete: (ids: string[]) => api.post('/tasks/batch-delete', { ids }),
   batchUpdateStatus: (ids: string[], status: string) => api.post('/tasks/batch-status', { ids, status }),

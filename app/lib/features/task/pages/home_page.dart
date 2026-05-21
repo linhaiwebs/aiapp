@@ -409,9 +409,13 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Widget _buildTaskClaimCard(TaskClaimModel claim, {required bool canStart}) {
     final isTextTask = claim.taskType == 'text';
+    final isAudioTask = claim.taskType == 'audio';
+    final isCarouselTask = isTextTask || isAudioTask;
     final iconData = isTextTask
         ? (canStart ? Icons.text_fields : Icons.text_fields_outlined)
-        : (canStart ? Icons.play_circle_fill : Icons.check_circle_outline);
+        : isAudioTask
+            ? (canStart ? Icons.mic : Icons.mic_none_outlined)
+            : (canStart ? Icons.play_circle_fill : Icons.check_circle_outline);
     final iconColor = canStart ? AppColors.primary : AppColors.outline;
 
     return Container(
@@ -442,7 +446,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             borderRadius: BorderRadius.circular(AppRadius.card.r),
             child: InkWell(
               onTap: canStart
-                  ? () => context.push(isTextTask ? '/text-collection/${claim.taskId}' : '/collection/${claim.id}')
+                  ? () => context.push(isCarouselTask ? '/text-carousel/${claim.id}' : '/collection/${claim.id}')
                   : null,
               borderRadius: BorderRadius.circular(AppRadius.card.r),
               child: Padding(
@@ -487,7 +491,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   ),
                   SizedBox(width: AppSpacing.sm.w),
                   if (canStart)
-                    _buildActionButton(isTextTask ? '查看文本' : '开始采集', iconColor)
+                    _buildActionButton(isTextTask ? '查看文本' : isAudioTask ? '朗读采集' : '开始采集', iconColor)
                   else
                     _buildStatusBadge(claim.status),
                 ]),

@@ -36,6 +36,17 @@ export class TextCollectionController {
     return this.textService.getTextStats(taskId);
   }
 
+  @Get('mine')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '获取我分配到的文本列表' })
+  async getMyTexts(
+    @Query('claimId') claimId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.textService.getMyTexts(claimId, userId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: '文本详情' })
   async findOne(@Param('id') id: string) {
@@ -92,17 +103,6 @@ export class TextCollectionController {
   @ApiOperation({ summary: '回收过期文本' })
   async recycle() {
     return this.textService.recycleExpiredTexts();
-  }
-
-  @Get('mine')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
-  @ApiOperation({ summary: '获取我分配到的文本列表' })
-  async getMyTexts(
-    @Query('claimId') claimId: string,
-    @CurrentUser('userId') userId: string,
-  ) {
-    return this.textService.getMyTexts(claimId, userId);
   }
 
   @Patch(':id/status')
