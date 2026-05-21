@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
 import '../../../core/theme/app_theme.dart';
 
 class AudioCheckResult {
@@ -12,241 +10,133 @@ class AudioCheckResult {
   bool get allPassed => signalOk && gainOk && silenceOk;
 }
 
+/// Audio check that uses amplitude data passed in from the external recorder.
+/// Caller must start recording, subscribe to amplitude, and call this dialog.
 Future<AudioCheckResult?> showAudioCheckDialog({
   required BuildContext context,
   required bool checkSignal,
   required bool checkGain,
   required bool checkSilence,
   required int noiseLimitDb,
+  required Stream<Amplitude> amplitudeStream,
+  required Future<void> Function() stopCheck,
 }) {
-  return showGeneralDialog<AudioCheckResult>(
+  final samples = <double>[];
+  late StreamSubscription<Amplitude> sub;
+  bool stopped = false;
+
+  return showDialog<AudioCheckResult>(
     context: context,
     barrierDismissible: false,
-    barrierLabel: '',
-    pageBuilder: (ctx, anim1, anim2) => const SizedBox.shrink(),
-    transitionBuilder: (ctx, anim1, anim2, child) {
-      return Center(
-        child: Material(
-          color: Colors.transparent,
-          child: _AudioCheckContent(
-            checkSignal: checkSignal,
-            checkGain: checkGain,
-            checkSilence: checkSilence,
-            noiseLimitDb: noiseLimitDb,
-          ),
-        ),
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          // Start collecting on first build
+          if (!stopped) {
+            sub = amplitudeStream.listen((amp) {
+              samples.add(amp.current);
+              if (ctx.mounted) setDialogState(() {});
+            });
+            Future.delayed(const Duration(seconds: 2), () async {
+              if (stopped) return;
+              stopped = true;
+              await sub.cancel();
+              await stopCheck();
+              if (!ctx.mounted) return;
+
+              if (samples.isEmpty) {
+                Navigator.pop(ctx);
+                return;
+              }
+              final maxDb = samples.reduce((a, b) => a > b ? a : b);
+              final avgDb = samples.reduce((a, b) => a + b) / samples.length;
+              final signalOk = checkSignal ? maxDb > -50 : null;
+              final gainOk = checkGain ? (maxDb > -30 && maxDb < -2) : null;
+              final silenceOk = checkSilence ? avgDb < -(noiseLimitDb / 2).clamp(10, 40).toDouble() : null;
+              final allPassed = (signalOk ?? true) && (gainOk ?? true) && (silenceOk ?? true);
+
+              if (allPassed) {
+                await Future.delayed(const Duration(milliseconds: 800));
+                if (ctx.mounted) Navigator.pop(ctx, AudioCheckResult(signalOk: signalOk ?? true, gainOk: gainOk ?? true, silenceOk: silenceOk ?? true, maxDb: maxDb, avgDb: avgDb));
+              } else {
+                setDialogState(() {});
+              }
+            });
+          }
+
+          final progress = (samples.length / 40).clamp(0.0, 1.0);
+          final checking = samples.length < 30;
+          final maxDb = samples.isEmpty ? -96.0 : samples.reduce((a, b) => a > b ? a : b);
+          final avgDb = samples.isEmpty ? -96.0 : samples.reduce((a, b) => a + b) / samples.length;
+          final signalOk = checkSignal ? maxDb > -50 : null;
+          final gainOk = checkGain ? (maxDb > -30 && maxDb < -2) : null;
+          final silenceOk = checkSilence ? avgDb < -(noiseLimitDb / 2).clamp(10, 40).toDouble() : null;
+          final allPassed = (signalOk ?? true) && (gainOk ?? true) && (silenceOk ?? true);
+
+          return PopScope(
+            canPop: !checking,
+            child: AlertDialog(
+              backgroundColor: const Color(0xFF1C1C1E),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              content: SizedBox(
+                width: 280.w,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 8),
+                    // Circular progress
+                    SizedBox(
+                      width: 120.w, height: 120.w,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(value: checking ? null : 1, strokeWidth: 4, color: checking ? AppColors.primary : allPassed ? AppColors.secondary : AppColors.error, backgroundColor: AppColors.outlineVariant.withValues(alpha: 0.2)),
+                          if (checking)
+                            Text('${(samples.length / 20 * 100).toInt()}%', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Color(0xFFE5E2E1)))
+                          else
+                            Icon(allPassed ? Icons.check_circle : Icons.warning_rounded, size: 40.sp, color: allPassed ? AppColors.secondary : AppColors.error),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(checking ? '正在检测...' : allPassed ? '检测通过' : '检测未通过',
+                        style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: checking ? AppColors.onSurface : allPassed ? AppColors.secondary : AppColors.error)),
+                    const SizedBox(height: 12),
+                    if (!checking) ...[
+                      if (checkSignal) _row('信号检测', signalOk!),
+                      if (checkGain) _row('增幅检测', gainOk!),
+                      if (checkSilence) _row('静音检测', silenceOk!),
+                      const SizedBox(height: 4),
+                      Text('${maxDb.toStringAsFixed(1)} dB / ${avgDb.toStringAsFixed(1)} dB', style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant)),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (!checking && !allPassed)
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('重新检测')),
+                        if (!checking)
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       );
     },
   );
 }
 
-class _AudioCheckContent extends StatefulWidget {
-  final bool checkSignal, checkGain, checkSilence;
-  final int noiseLimitDb;
-  const _AudioCheckContent({required this.checkSignal, required this.checkGain, required this.checkSilence, required this.noiseLimitDb});
-
-  @override State<_AudioCheckContent> createState() => _AudioCheckContentState();
-}
-
-class _AudioCheckContentState extends State<_AudioCheckContent> with SingleTickerProviderStateMixin {
-  late AnimationController _animCtrl;
-  late Animation<double> _rotationAnim;
-  String _status = '准备检测...';
-  double _progress = 0;
-  bool _checking = true, _passed = false;
-  bool? _signalOk, _gainOk, _silenceOk;
-  double _maxDb = -96, _avgDb = -96;
-  final AudioRecorder _checkRecorder = AudioRecorder();
-  final List<double> _samples = [];
-
-  @override void initState() {
-    super.initState();
-    _animCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 2));
-    _rotationAnim = Tween<double>(begin: 0, end: 1).animate(_animCtrl);
-    _animCtrl.repeat();
-    _runCheck();
-  }
-
-  @override void dispose() {
-    _animCtrl.dispose();
-    _checkRecorder.stop().then((_) => _checkRecorder.dispose());
-    super.dispose();
-  }
-
-  // Cleanup before popping to ensure recorder is released
-  Future<void> _cleanupAndPop([AudioCheckResult? result]) async {
-    try { await _checkRecorder.stop(); } catch (_) {}
-    await Future.delayed(const Duration(milliseconds: 200));
-    if (mounted) Navigator.pop(context, result);
-  }
-
-  Future<void> _runCheck() async {
-    try {
-      final hasPermission = await _checkRecorder.hasPermission();
-      if (!hasPermission) { if (mounted) _setFailed('无麦克风权限'); return; }
-
-      setState(() => _status = '正在检测...');
-
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/check_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _checkRecorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1), path: path);
-
-      final sub = _checkRecorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen((amp) {
-        _samples.add(amp.current);
-        if (mounted) setState(() => _progress = (_progress + 0.05).clamp(0.0, 0.95));
-      });
-
-      await Future.delayed(const Duration(seconds: 2));
-      await sub.cancel();
-      final recordedPath = await _checkRecorder.stop();
-      // Clean up temp file
-      if (recordedPath != null) {
-        try { await (await getTemporaryDirectory()).list().firstWhere((f) => f.path == recordedPath).then((f) => f.delete()); } catch (_) {}
-      }
-
-      setState(() => _progress = 1);
-      _analyzeResults();
-    } catch (e) {
-      _setFailed('检测失败: $e');
-    }
-  }
-
-  void _analyzeResults() {
-    if (_samples.isEmpty) { _setFailed('未检测到音频信号'); return; }
-    _maxDb = _samples.reduce((a, b) => a > b ? a : b);
-    _avgDb = _samples.reduce((a, b) => a + b) / _samples.length;
-
-    _signalOk = widget.checkSignal ? _maxDb > -50 : null;
-    _gainOk = widget.checkGain ? (_maxDb > -30 && _maxDb < -2) : null;
-    _silenceOk = widget.checkSilence ? _avgDb < -(widget.noiseLimitDb / 2).clamp(10, 40).toDouble() : null;
-
-    _animCtrl.stop();
-    setState(() {
-      _checking = false;
-      _passed = (_signalOk ?? true) && (_gainOk ?? true) && (_silenceOk ?? true);
-    });
-
-    if (_passed) {
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) Navigator.pop(context, AudioCheckResult(signalOk: _signalOk ?? true, gainOk: _gainOk ?? true, silenceOk: _silenceOk ?? true, maxDb: _maxDb, avgDb: _avgDb));
-      });
-    }
-  }
-
-  void _setFailed(String msg) { _animCtrl.stop(); setState(() { _checking = false; _passed = false; _status = msg; }); }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 300.w,
-      padding: EdgeInsets.all(28.w),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 30, offset: const Offset(0, 10))],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Circular progress
-          SizedBox(
-            width: 140.w, height: 140.w,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Dashed background ring
-                CustomPaint(size: Size(140.w, 140.w), painter: _DashedRingPainter(progress: _checking ? null : 1, color: _checking ? AppColors.primary : _passed ? AppColors.secondary : AppColors.error, animCtrl: _checking ? _animCtrl : null)),
-                // Center icon/text
-                _checking
-                    ? RotationTransition(
-                        turns: _rotationAnim,
-                        child: Icon(Icons.autorenew, size: 32.sp, color: AppColors.primary),
-                      )
-                    : _passed
-                        ? Icon(Icons.check_circle, size: 44.sp, color: AppColors.secondary)
-                        : Icon(Icons.warning_rounded, size: 44.sp, color: AppColors.error),
-              ],
-            ),
-          ),
-          SizedBox(height: 12.h),
-          Text(_checking ? _status : _passed ? '检测通过' : '检测未通过', style: TextStyle(fontSize: 16.sp, fontWeight: FontWeight.w600, color: _checking ? AppColors.onSurface : _passed ? AppColors.secondary : AppColors.error)),
-          SizedBox(height: 16.h),
-          if (!_checking) ...[
-            if (widget.checkSignal) _row('信号检测', _signalOk!),
-            if (widget.checkGain) _row('增幅检测', _gainOk!),
-            if (widget.checkSilence) _row('静音检测', _silenceOk!),
-            SizedBox(height: 8.h),
-            Text('峰值 ${_maxDb.toStringAsFixed(1)} dB · 均值 ${_avgDb.toStringAsFixed(1)} dB', style: TextStyle(fontSize: 11.sp, color: AppColors.onSurfaceVariant)),
-          ],
-          SizedBox(height: 20.h),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            if (!_checking && !_passed)
-              SizedBox(
-                height: 38.h,
-                child: ElevatedButton(
-                  onPressed: () { setState(() { _checking = true; _samples.clear(); _progress = 0; }); _animCtrl.repeat(); _runCheck(); },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: AppColors.onPrimary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  child: const Text('重新检测'),
-                ),
-              ),
-            if (!_checking) SizedBox(width: 12.w),
-            if (!_checking)
-              SizedBox(
-                height: 38.h,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.onSurfaceVariant, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-                  child: const Text('取消'),
-                ),
-              ),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  Widget _row(String label, bool ok) => Padding(
-    padding: EdgeInsets.symmetric(vertical: 5.h),
-    child: Row(children: [
-      Icon(ok ? Icons.check_circle : Icons.cancel, size: 18.sp, color: ok ? AppColors.secondary : AppColors.error),
-      SizedBox(width: 8.w),
-      Text(label, style: TextStyle(fontSize: 14.sp, color: AppColors.onSurface)),
-      const Spacer(),
-      Text(ok ? '通过' : '未通过', style: TextStyle(fontSize: 13.sp, fontWeight: FontWeight.w600, color: ok ? AppColors.secondary : AppColors.error)),
-    ]),
-  );
-}
-
-/// Dashed ring painter — shows progress as filled dash segments
-class _DashedRingPainter extends CustomPainter {
-  final double? progress; final Color color; final AnimationController? animCtrl;
-  _DashedRingPainter({this.progress, required this.color, this.animCtrl});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 6;
-    final paint = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 3.5..strokeCap = StrokeCap.round;
-    final bgPaint = Paint()..color = color.withValues(alpha: 0.12)..style = PaintingStyle.stroke..strokeWidth = 3.5..strokeCap = StrokeCap.round;
-
-    const segs = 36;
-    final segAngle = 2 * 3.14159 / segs;
-    final dashAngle = segAngle * 0.65;
-
-    for (int i = 0; i < segs; i++) {
-      final start = i * segAngle;
-      if (progress == null) {
-        // Animated indeterminate
-        final t = (DateTime.now().millisecondsSinceEpoch / 1000.0) % 2;
-        final offset = (t * segs / 2).round();
-        final active = ((i + offset) % segs) < segs ~/ 2;
-        canvas.drawArc(Rect.fromCircle(center: center, radius: radius), start, dashAngle, false, active ? paint : bgPaint);
-      } else {
-        canvas.drawArc(Rect.fromCircle(center: center, radius: radius), start, dashAngle, false, (i / segs) <= progress! ? paint : bgPaint);
-      }
-    }
-  }
-
-  @override bool shouldRepaint(covariant _DashedRingPainter old) => true;
-}
+Widget _row(String label, bool ok) => Padding(
+  padding: EdgeInsets.symmetric(vertical: 3.h),
+  child: Row(children: [
+    Icon(ok ? Icons.check_circle : Icons.cancel, size: 16.sp, color: ok ? AppColors.secondary : AppColors.error),
+    const SizedBox(width: 6),
+    Text(label, style: TextStyle(fontSize: 13.sp, color: const Color(0xFFE5E2E1))),
+    const Spacer(),
+    Text(ok ? '通过' : '未通过', style: TextStyle(fontSize: 12.sp, fontWeight: FontWeight.w600, color: ok ? AppColors.secondary : AppColors.error)),
+  ]),
+);

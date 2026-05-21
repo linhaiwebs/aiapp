@@ -109,33 +109,38 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       if (!granted.isGranted) return;
     }
 
-    // Pre-recording audio check (once per session)
-    if (!_audioCheckPassed) {
-      final needsCheck = _claim?.signalDetection == true ||
-          _claim?.gainDetection == true ||
-          _claim?.silenceDetection == true;
-      if (needsCheck) {
-        final result = await showAudioCheckDialog(
-          context: context,
-          checkSignal: _claim?.signalDetection ?? false,
-          checkGain: _claim?.gainDetection ?? false,
-          checkSilence: _claim?.silenceDetection ?? false,
-          noiseLimitDb: _claim?.noiseLimit ?? 60,
-        );
-        if (result == null || !result.allPassed) return;
-        // Small delay to let the check recorder fully release
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
-      _audioCheckPassed = true;
-    }
-
-    // Start actual recording
     try {
-      final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);
-      final path = kIsWeb
-          ? 'rec_${DateTime.now().millisecondsSinceEpoch}.opus'
-          : '${(await getTemporaryDirectory()).path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
-      await _recorder.start(config, path: path);
+      final dir = await getTemporaryDirectory();
+
+      // Pre-recording audio check — use the same recorder to avoid conflicts
+      if (!_audioCheckPassed) {
+        final needsCheck = _claim?.signalDetection == true ||
+            _claim?.gainDetection == true ||
+            _claim?.silenceDetection == true;
+        if (needsCheck) {
+          final checkPath = '${dir.path}/check_${DateTime.now().millisecondsSinceEpoch}.m4a';
+          await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1), path: checkPath);
+          final stream = _recorder.onAmplitudeChanged(const Duration(milliseconds: 100));
+          final result = await showAudioCheckDialog(
+            context: context,
+            checkSignal: _claim?.signalDetection ?? false,
+            checkGain: _claim?.gainDetection ?? false,
+            checkSilence: _claim?.silenceDetection ?? false,
+            noiseLimitDb: _claim?.noiseLimit ?? 60,
+            amplitudeStream: stream,
+            stopCheck: () => _recorder.stop(),
+          );
+          await _recorder.stop();
+          if (result == null || !result.allPassed) return;
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+        _audioCheckPassed = true;
+      }
+
+      // Start opus recording
+      final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.opus';
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1), path: opusPath);
+
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
       });
@@ -144,9 +149,10 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
         _recordingTextId = textId;
       });
     } catch (e) {
+      try { await _recorder.stop(); } catch (_) {}
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('录音启动失败: $e'), backgroundColor: AppColors.error),
+          SnackBar(content: Text('录音失败: $e', style: const TextStyle(color: Colors.white)), backgroundColor: AppColors.error),
         );
       }
     }
