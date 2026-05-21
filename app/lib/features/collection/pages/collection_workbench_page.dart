@@ -18,6 +18,7 @@ import '../../../core/services/submission_service.dart';
 import '../../../core/services/file_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 import '../../../core/network/dio_client.dart';
+import '../widgets/audio_check_dialog.dart';
 
 class CollectionWorkbenchPage extends ConsumerStatefulWidget {
   final String claimId;
@@ -102,6 +103,21 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
           }
           return;
         }
+      }
+
+      // Pre-recording audio check
+      final needsCheck = _claim?.signalDetection == true ||
+          _claim?.gainDetection == true ||
+          _claim?.silenceDetection == true;
+      if (needsCheck) {
+        final result = await showAudioCheckDialog(
+          context: context,
+          checkSignal: _claim?.signalDetection ?? false,
+          checkGain: _claim?.gainDetection ?? false,
+          checkSilence: _claim?.silenceDetection ?? false,
+          noiseLimitDb: _claim?.noiseLimit ?? 60,
+        );
+        if (result == null || !result.allPassed) return;
       }
 
       final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);

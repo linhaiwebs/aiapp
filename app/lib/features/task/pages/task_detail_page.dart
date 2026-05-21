@@ -807,9 +807,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
 
   bool get _hasAssistFeatures {
     final task = _task!;
-    return task.assistRecognition ||
-        task.silenceDetection ||
-        task.voiceprintDetection ||
+    return task.silenceDetection ||
         task.gainDetection ||
         task.signalDetection;
   }
@@ -838,9 +836,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
               spacing: 8.w,
               runSpacing: 8.h,
               children: [
-                if (task.assistRecognition) _assistTag('辅助识别'),
                 if (task.silenceDetection) _assistTag('静音检测'),
-                if (task.voiceprintDetection) _assistTag('声纹检测'),
                 if (task.gainDetection) _assistTag('增幅检测'),
                 if (task.signalDetection) _assistTag('信号检测'),
               ],

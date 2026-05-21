@@ -19,6 +19,7 @@ import '../../../core/services/text_collection_service.dart';
 import '../../../core/services/submission_service.dart';
 import '../../../core/services/file_service.dart';
 import '../../../core/network/dio_client.dart';
+import '../widgets/audio_check_dialog.dart';
 
 class TextCarouselPage extends ConsumerStatefulWidget {
   final String claimId;
@@ -106,6 +107,22 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       if (!granted.isGranted) return;
     }
 
+    // Pre-recording audio check (if detection features are enabled)
+    final needsCheck = _claim?.signalDetection == true ||
+        _claim?.gainDetection == true ||
+        _claim?.silenceDetection == true;
+    if (needsCheck) {
+      final result = await showAudioCheckDialog(
+        context: context,
+        checkSignal: _claim?.signalDetection ?? false,
+        checkGain: _claim?.gainDetection ?? false,
+        checkSilence: _claim?.silenceDetection ?? false,
+        noiseLimitDb: _claim?.noiseLimit ?? 60,
+      );
+      if (result == null || !result.allPassed) return;
+    }
+
+    // Start actual recording
     final config = const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, numChannels: 1);
     final path = kIsWeb
         ? 'rec_${DateTime.now().millisecondsSinceEpoch}.opus'

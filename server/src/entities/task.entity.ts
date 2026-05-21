@@ -194,18 +194,10 @@ export class Task {
   @Column({ type: 'int', nullable: true })
   silencePadding: number;
 
-  // ===== 机器辅助功能 =====
-  /** 辅助识别 */
-  @Column({ default: false })
-  assistRecognition: boolean;
-
+  // ===== 音频检测功能 =====
   /** 静音检测 */
   @Column({ default: false })
   silenceDetection: boolean;
-
-  /** 声纹检测 */
-  @Column({ default: false })
-  voiceprintDetection: boolean;
 
   /** 增幅检测 */
   @Column({ default: false })

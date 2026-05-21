@@ -71,9 +71,7 @@ class TaskModel {
   final int? noiseLimit;
   final int? maxSpeechLength;
   final int? silencePadding;
-  final bool assistRecognition;
   final bool silenceDetection;
-  final bool voiceprintDetection;
   final bool gainDetection;
   final bool signalDetection;
   final bool allowMultipleClaims;
@@ -116,9 +114,7 @@ class TaskModel {
     this.noiseLimit,
     this.maxSpeechLength,
     this.silencePadding,
-    this.assistRecognition = false,
     this.silenceDetection = false,
-    this.voiceprintDetection = false,
     this.gainDetection = false,
     this.signalDetection = false,
     this.allowMultipleClaims = false,
@@ -170,9 +166,7 @@ class TaskModel {
         noiseLimit: _toInt(json['noiseLimit'], 0) == 0 ? null : _toInt(json['noiseLimit']),
         maxSpeechLength: _toInt(json['maxSpeechLength'], 0) == 0 ? null : _toInt(json['maxSpeechLength']),
         silencePadding: _toInt(json['silencePadding'], 0) == 0 ? null : _toInt(json['silencePadding']),
-        assistRecognition: json['assistRecognition'] as bool? ?? false,
         silenceDetection: json['silenceDetection'] as bool? ?? false,
-        voiceprintDetection: json['voiceprintDetection'] as bool? ?? false,
         gainDetection: json['gainDetection'] as bool? ?? false,
         signalDetection: json['signalDetection'] as bool? ?? false,
         allowMultipleClaims: json['allowMultipleClaims'] as bool? ?? false,

@@ -124,9 +124,7 @@ export default function TaskForm() {
         delete data.noiseLimit;
         delete data.maxSpeechLength;
         delete data.silencePadding;
-        delete data.assistRecognition;
         delete data.silenceDetection;
-        delete data.voiceprintDetection;
         delete data.gainDetection;
         delete data.signalDetection;
       }
@@ -244,9 +242,7 @@ export default function TaskForm() {
             textAssignCount: 0,
             textPerUserCount: 0,
             textCopyForAssign: false,
-            assistRecognition: false,
             silenceDetection: false,
-            voiceprintDetection: false,
             gainDetection: false,
             signalDetection: false,
           }}
@@ -563,34 +559,22 @@ export default function TaskForm() {
                 });
                 tabs.push({
                   key: 'assist',
-                  label: '机器辅助',
+                  label: '音频检测',
                   children: (
                     <>
                       <Row gutter={16}>
                         <Col span={8}>
-                          <Form.Item name="assistRecognition" label="辅助识别" valuePropName="checked" tooltip="利用机器语音识别技术辅助标注">
+                          <Form.Item name="silenceDetection" label="静音检测" valuePropName="checked" tooltip="录音前检测环境噪音是否超标">
                             <Switch />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="silenceDetection" label="静音检测" valuePropName="checked" tooltip="自动检测音频中的静音片段">
+                          <Form.Item name="gainDetection" label="增幅检测" valuePropName="checked" tooltip="录音前检测信号增益是否正常">
                             <Switch />
                           </Form.Item>
                         </Col>
                         <Col span={8}>
-                          <Form.Item name="voiceprintDetection" label="声纹检测" valuePropName="checked" tooltip="自动检测说话人的声纹特征">
-                            <Switch />
-                          </Form.Item>
-                        </Col>
-                      </Row>
-                      <Row gutter={16}>
-                        <Col span={8}>
-                          <Form.Item name="gainDetection" label="增幅检测" valuePropName="checked" tooltip="自动检测音频信号增益是否正常">
-                            <Switch />
-                          </Form.Item>
-                        </Col>
-                        <Col span={8}>
-                          <Form.Item name="signalDetection" label="信号检测" valuePropName="checked" tooltip="自动检测音频信号质量是否达标">
+                          <Form.Item name="signalDetection" label="信号检测" valuePropName="checked" tooltip="录音前检测是否有有效音频信号">
                             <Switch />
                           </Form.Item>
                         </Col>

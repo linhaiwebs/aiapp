@@ -34,6 +34,10 @@ class TaskClaimModel {
   final String? taskTitle; // from joined task
   final String? taskDescription; // from joined task
   final String? taskInstructions; // from joined task
+  final bool signalDetection; // from joined task
+  final bool gainDetection; // from joined task
+  final bool silenceDetection; // from joined task
+  final int noiseLimit; // from joined task
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -53,6 +57,10 @@ class TaskClaimModel {
     this.taskTitle,
     this.taskDescription,
     this.taskInstructions,
+    this.signalDetection = false,
+    this.gainDetection = false,
+    this.silenceDetection = false,
+    this.noiseLimit = 60,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -81,6 +89,10 @@ class TaskClaimModel {
         taskTitle: json['task']?['title'] as String?,
         taskDescription: json['task']?['description'] as String?,
         taskInstructions: json['task']?['instructions'] as String?,
+        signalDetection: json['task']?['signalDetection'] as bool? ?? false,
+        gainDetection: json['task']?['gainDetection'] as bool? ?? false,
+        silenceDetection: json['task']?['silenceDetection'] as bool? ?? false,
+        noiseLimit: _toInt(json['task']?['noiseLimit'], 60),
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
       );

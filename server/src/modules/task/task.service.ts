@@ -52,9 +52,7 @@ export class TaskService {
       delete cleanDto.noiseLimit;
       delete cleanDto.maxSpeechLength;
       delete cleanDto.silencePadding;
-      delete cleanDto.assistRecognition;
       delete cleanDto.silenceDetection;
-      delete cleanDto.voiceprintDetection;
       delete cleanDto.gainDetection;
       delete cleanDto.signalDetection;
     }
