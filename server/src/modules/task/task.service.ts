@@ -179,21 +179,19 @@ export class TaskService {
     const existingCount = await this.textCollectionRepository.count({
       where: { taskId: task.id },
     });
-    if (existingCount > 0) return; // Already synced, skip
+    if (existingCount > 0) return;
 
-    // Batch insert to avoid PostgreSQL parameter limit
-    const BATCH_SIZE = 500;
+    // Use insert (true bulk) instead of save (row-by-row check) for performance
+    const BATCH_SIZE = 1000;
     for (let i = 0; i < lines.length; i += BATCH_SIZE) {
-      const batch = lines.slice(i, i + BATCH_SIZE).map((content, j) =>
-        this.textCollectionRepository.create({
-          taskId: task.id,
-          content,
-          format: 'plain' as any,
-          sortOrder: i + j,
-          status: TextStatus.PENDING,
-        }),
-      );
-      await this.textCollectionRepository.save(batch);
+      const batch = lines.slice(i, i + BATCH_SIZE).map((content, j) => ({
+        taskId: task.id,
+        content,
+        format: 'plain',
+        sortOrder: i + j,
+        status: TextStatus.PENDING,
+      }));
+      await this.textCollectionRepository.insert(batch as any);
     }
     console.log(`[syncTextCollections] Created ${lines.length} texts for task ${task.id}`);
   }

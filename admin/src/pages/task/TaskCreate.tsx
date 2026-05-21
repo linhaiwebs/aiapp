@@ -234,7 +234,7 @@ export default function TaskForm() {
             maxClaimsPerUser: 1,
             minQualityScore: 60,
             qcMethod: 'spot_check',
-            audioFormat: 'wav',
+            audioFormat: 'opus',
             audioChannel: 'mono',
             sampleRate: 16000,
             allowMultipleClaims: false,
@@ -509,7 +509,7 @@ export default function TaskForm() {
                     <>
                       <Row gutter={16}>
                         <Col span={8}>
-                          <Form.Item name="audioFormat" label="音频格式" tooltip="输出音频文件格式：WAV无损 / PCM原始 / Opus压缩（推荐语音采集）">
+                          <Form.Item name="audioFormat" label="音频格式" tooltip="Opus 推荐（体积小音质好）| WAV 无损 | PCM 原始">
                             <Select
                               options={[
                                 { label: 'WAV', value: 'wav' },

@@ -63,9 +63,9 @@ export class TextCollectionService {
 
     if (texts.length === 0) throw new BadRequestException('文本列表不能为空');
 
-    // Batch insert to avoid PostgreSQL parameter limit
-    for (let i = 0; i < texts.length; i += 500) {
-      await this.textRepository.save(texts.slice(i, i + 500));
+    // Use insert (bulk) instead of save (row-by-row) for performance
+    for (let i = 0; i < texts.length; i += 1000) {
+      await this.textRepository.insert(texts.slice(i, i + 1000));
     }
     return { count: texts.length };
   }
@@ -109,9 +109,9 @@ export class TextCollectionService {
       }),
     );
 
-    // Batch insert to avoid PostgreSQL parameter limit
-    for (let i = 0; i < texts.length; i += 500) {
-      await this.textRepository.save(texts.slice(i, i + 500));
+    // Use insert (bulk) instead of save (row-by-row)
+    for (let i = 0; i < texts.length; i += 1000) {
+      await this.textRepository.insert(texts.slice(i, i + 1000));
     }
     return { count: texts.length };
   }
