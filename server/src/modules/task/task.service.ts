@@ -67,7 +67,12 @@ export class TaskService {
 
     try {
       const task = this.taskRepository.create(cleanDto);
-      return await this.taskRepository.save(task);
+      const saved = await this.taskRepository.save(task);
+
+      // Auto-create text collections from instructions (每行一条)
+      await this.syncTextCollections(saved);
+
+      return saved;
     } catch (error) {
       console.error('[Task Create] Error:', error);
       throw error;
@@ -152,7 +157,42 @@ export class TaskService {
       Object.entries(dto).filter(([, v]) => v !== null && v !== undefined),
     );
     Object.assign(task, cleanDto);
-    return this.taskRepository.save(task);
+    const saved = await this.taskRepository.save(task);
+
+    // Sync text collections from instructions（仅当 instructions 字段有更新时）
+    if (cleanDto.instructions !== undefined) {
+      await this.syncTextCollections(saved);
+    }
+
+    return saved;
+  }
+
+  /** 根据任务 instructions 自动创建/刷新 text_collections */
+  private async syncTextCollections(task: Task): Promise<void> {
+    const instructions = task.instructions;
+    if (!instructions || !instructions.trim()) return;
+
+    const lines = instructions.split('\n').map(l => l.trim()).filter(l => l);
+    if (lines.length === 0) return;
+
+    // Check if texts already exist for this task (avoid duplicates)
+    const existingCount = await this.textCollectionRepository.count({
+      where: { taskId: task.id },
+    });
+    if (existingCount > 0) return; // Already synced, skip
+
+    const texts = lines.map((content, index) =>
+      this.textCollectionRepository.create({
+        taskId: task.id,
+        content,
+        format: 'plain' as any,
+        sortOrder: index,
+        status: TextStatus.PENDING,
+      }),
+    );
+
+    await this.textCollectionRepository.save(texts);
+    console.log(`[syncTextCollections] Created ${texts.length} texts for task ${task.id}`);
   }
 
   async remove(id: string): Promise<void> {
@@ -260,9 +300,14 @@ export class TaskService {
       await this.taskRepository.save(task);
     }
 
-    // 文本/语音任务：已领取用户自动从 PENDING 文本池中按顺序分配
-    if (claimStatus === ClaimStatus.CLAIMED && (task.type === TaskType.TEXT || (task.type as string) === 'audio')) {
-      await this.autoAssignTextsForClaim(task, saved);
+    // 自动分配文本：只要该任务有 text_collections，领取时即分配
+    if (claimStatus === ClaimStatus.CLAIMED) {
+      const hasTexts = await this.textCollectionRepository.count({
+        where: { taskId: task.id },
+      });
+      if (hasTexts > 0) {
+        await this.autoAssignTextsForClaim(task, saved);
+      }
     }
 
     return saved;
