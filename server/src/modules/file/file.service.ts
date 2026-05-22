@@ -154,12 +154,11 @@ export class FileService {
     const totalChunks = file.uploadInfo?.totalChunks ?? 0;
 
     if (this.storageType === 'oss') {
-      // OSS: 文件由 APP 直传，这里只记录 chunk 信息
-      // 单分片：文件已通过 presigned URL 直传 OSS，这里只是标记
-      // 多分片：暂不支持（大文件建议走 OSS 分片上传 SDK）
+      // 文件由服务端中转上传到 OSS
       if (totalChunks > 1) {
         throw new BadRequestException('OSS 模式暂不支持多分片，请使用单分片上传');
       }
+      await this.ossClient.put(file.storedName, chunkBuffer);
     } else if (this.storageType === 'minio') {
       const objectName = totalChunks <= 1
         ? file.storedName
