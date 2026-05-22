@@ -55,8 +55,9 @@ export class ProjectService {
   }
 
   async remove(id: string): Promise<void> {
-    const project = await this.findOne(id);
-    await this.projectRepository.remove(project);
+    // 先解除关联任务的项目引用（避免外键约束阻止删除）
+    await this.taskRepository.update({ projectId: id }, { projectId: null as any } as any);
+    await this.projectRepository.delete(id);
   }
 
   async findTasks(projectId: string, page = 1, pageSize = 10) {
