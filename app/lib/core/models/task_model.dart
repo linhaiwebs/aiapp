@@ -76,6 +76,7 @@ class TaskModel {
   final bool signalDetection;
   final bool allowMultipleClaims;
   final int reviewRounds;
+  final bool requireSample;
   final int recycleHours;
   final int textAssignCount;
   final int textPerUserCount;
@@ -119,6 +120,7 @@ class TaskModel {
     this.signalDetection = false,
     this.allowMultipleClaims = false,
     this.reviewRounds = 1,
+    this.requireSample = false,
     this.recycleHours = 48,
     this.textAssignCount = 0,
     this.textPerUserCount = 0,
@@ -171,6 +173,7 @@ class TaskModel {
         signalDetection: json['signalDetection'] as bool? ?? false,
         allowMultipleClaims: json['allowMultipleClaims'] as bool? ?? false,
         reviewRounds: _toInt(json['reviewRounds'], 1),
+        requireSample: json['requireSample'] as bool? ?? false,
         recycleHours: _toInt(json['recycleHours'], 48),
         textAssignCount: _toInt(json['textAssignCount']),
         textPerUserCount: _toInt(json['textPerUserCount']),
