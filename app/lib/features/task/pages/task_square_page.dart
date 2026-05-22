@@ -73,7 +73,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
         await ref.read(taskServiceProvider).submitSample(claimId, sampleFileId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('采样已提交，等待审核'), backgroundColor: AppColors.secondary),
+            const SnackBar(content: Text('您的采样已经上传，请耐心等待管理员审核'), backgroundColor: AppColors.secondary),
           );
           context.go('/home');
         }

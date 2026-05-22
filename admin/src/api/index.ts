@@ -50,6 +50,7 @@ export const taskApi = {
   sampleClaims: (params?: any) => api.get('/tasks/claims/sample-review', { params }),
   approveSample: (claimId: string) => api.post(`/tasks/claims/${claimId}/approve-sample`),
   rejectSample: (claimId: string, reason: string) => api.post(`/tasks/claims/${claimId}/reject-sample`, { reason }),
+  getFileUrl: (fileId: string) => api.get(`/files/${fileId}/download-url`),
   clearAllData: () => api.delete('/tasks/data/all'),
   batchDelete: (ids: string[]) => api.post('/tasks/batch-delete', { ids }),
   batchUpdateStatus: (ids: string[], status: string) => api.post('/tasks/batch-status', { ids, status }),

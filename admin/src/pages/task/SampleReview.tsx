@@ -34,7 +34,15 @@ export default function SampleReview() {
     catch { message.error('操作失败'); }
   };
 
-  const getStreamUrl = (fid: string) => `/api/files/${fid}/stream`;
+  const playSample = async (fileId: string) => {
+    try {
+      // Get presigned download URL (avoids auth issue with plain <audio>)
+      const res: any = await taskApi.getFileUrl(fileId);
+      const url = res?.url || `/api/files/${fileId}/stream`;
+      const audio = new Audio(url);
+      audio.play();
+    } catch { message.error('播放失败'); }
+  };
 
   const columns = [
     { title: '申请人', key: 'user', render: (_: any, r: any) => r.user?.nickname || r.user?.phone || r.userId?.substring(0, 8) },
@@ -45,11 +53,8 @@ export default function SampleReview() {
       title: '样音', key: 'sample', width: 80,
       render: (_: any, r: any) => r.sampleFileId ? (
         <Button type="link" size="small" icon={<PlayCircleOutlined />}
-          onClick={() => {
-            const audio = new Audio(getStreamUrl(r.sampleFileId));
-            audio.play();
-          }}>试听</Button>
-      ) : '未上传'
+          onClick={() => playSample(r.sampleFileId)}>试听</Button>
+      ) : <span style={{ color: '#999' }}>未上传</span>
     },
     {
       title: '操作', key: 'action', width: 140,
