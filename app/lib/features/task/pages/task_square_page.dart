@@ -135,6 +135,11 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
       }
     }
 
+    // 取任务说明的前3段作为样音朗读文本
+    final instructions = task.instructions ?? task.description ?? '';
+    final sampleLines = instructions.split('\n').where((l) => l.trim().isNotEmpty).take(3).toList();
+    final sampleText = sampleLines.isNotEmpty ? sampleLines.join('\n') : '请朗读一段语音';
+
     return showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -169,18 +174,33 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
 
           return AlertDialog(
             title: Text('录制样音 - ${task.title}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('请按要求录制一段语音作为采样，审核通过后方可领取任务。', style: TextStyle(fontSize: 13)),
-                const SizedBox(height: 16),
-                if (isRecording)
-                  Text('录音中: ${seconds}s', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.error))
-                else if (uploadedFileId != null)
-                  const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: AppColors.secondary), SizedBox(width: 8), Text('采样已上传', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600))])
-                else
-                  const Text('点击下方按钮开始录制', style: TextStyle(fontSize: 14, color: Colors.grey)),
-              ],
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('请朗读以下文本作为采样', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1C1C1E),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Text(sampleText, style: const TextStyle(fontSize: 16, height: 1.6, color: Color(0xFFE5E2E1))),
+                  ),
+                  const SizedBox(height: 16),
+                  if (isRecording)
+                    Center(child: Text('录音中: ${seconds}s', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.error)))
+                  else if (uploadedFileId != null)
+                    const Center(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: AppColors.secondary), SizedBox(width: 8), Text('采样已上传', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600))]))
+                  else
+                    const Center(child: Text('点击下方按钮开始录制', style: TextStyle(fontSize: 14, color: Colors.grey))),
+                ],
+              ),
             ),
             actions: [
               TextButton(onPressed: () { timer?.cancel(); recorder.dispose(); Navigator.pop(ctx); }, child: const Text('取消')),
