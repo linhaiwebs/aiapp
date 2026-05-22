@@ -13,6 +13,7 @@ import TeamList from './pages/team/TeamList';
 import ClaimApprovals from './pages/task/ClaimApprovals';
 import ClaimedTasks from './pages/task/ClaimedTasks';
 import TaskReview from './pages/task/TaskReview';
+import SampleReview from './pages/task/SampleReview';
 import CollectionDataList from './pages/collection/CollectionDataList';
 import DataExport from './pages/export/DataExport';
 import ProjectList from './pages/project/ProjectList';
@@ -66,6 +67,7 @@ function App() {
         <Route path="review/submissions" element={<SubmissionList />} />
         <Route path="claims" element={<ClaimedTasks />} />
         <Route path="review/tasks" element={<TaskReview />} />
+        <Route path="review/samples" element={<SampleReview />} />
         <Route path="collections/:type" element={<CollectionDataList />} />
 
         <Route path="projects" element={<ProjectList />} />

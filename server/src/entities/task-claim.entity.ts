@@ -14,6 +14,10 @@ import { Submission } from './submission.entity';
 
 export enum ClaimStatus {
   PENDING_APPROVAL = 'pending_approval',
+  /** 采样审核中 */
+  SAMPLE_REVIEW = 'sample_review',
+  /** 采样驳回 */
+  SAMPLE_REJECTED = 'sample_rejected',
   CLAIMED = 'claimed',
   IN_PROGRESS = 'in_progress',
   SUBMITTED = 'submitted',
@@ -68,6 +72,18 @@ export class TaskClaim {
 
   @Column({ type: 'int', default: 0 })
   rejectedCount: number;
+
+  /** 采样文件ID */
+  @Column({ nullable: true })
+  sampleFileId: string;
+
+  /** 采样驳回原因 */
+  @Column({ type: 'text', nullable: true })
+  sampleRejectReason: string;
+
+  /** 采样审核时间 */
+  @Column({ nullable: true })
+  sampleReviewedAt: Date;
 
   @OneToMany(() => Submission, (submission) => submission.claim)
   submissions: Submission[];

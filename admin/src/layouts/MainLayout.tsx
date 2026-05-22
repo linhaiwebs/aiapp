@@ -26,6 +26,7 @@ const menuItems = [
   { key: '/tasks', icon: <FileTextOutlined />, label: '任务管理' },
   { key: '/claims', icon: <AuditOutlined />, label: '任务认领' },
   { key: '/review/tasks', icon: <FileTextOutlined />, label: '任务审核' },
+  { key: '/review/samples', icon: <AuditOutlined />, label: '采样审核' },
   {
     key: '/collections',
     icon: <FolderOutlined />,

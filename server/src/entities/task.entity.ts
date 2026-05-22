@@ -212,6 +212,10 @@ export class Task {
   @Column({ default: false })
   allowMultipleClaims: boolean;
 
+  /** 是否要求采样审核（领取前需提交样音/样图） */
+  @Column({ default: false })
+  requireSample: boolean;
+
   /** 验收轮数 */
   @Column({ type: 'int', default: 1 })
   reviewRounds: number;

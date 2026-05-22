@@ -276,7 +276,12 @@ export class TaskService {
         where: { teamId: task.teamId, userId, status: MemberStatus.APPROVED },
       });
       if (isMember) {
-        claimStatus = ClaimStatus.CLAIMED;
+        // 开启了采样审核 → 需要先通过采样
+        if (task.requireSample) {
+          claimStatus = ClaimStatus.SAMPLE_REVIEW;
+        } else {
+          claimStatus = ClaimStatus.CLAIMED;
+        }
       }
     }
 
@@ -667,5 +672,64 @@ export class TaskService {
     const tasksCount = await this.taskRepository.count();
     await this.taskRepository.delete({});
     return { tasksDeleted: tasksCount, claimsDeleted: claimsCount };
+  }
+
+  // ─── 采样审核 ───
+
+  /** 提交采样文件 */
+  async submitSample(claimId: string, userId: string, sampleFileId: string): Promise<TaskClaim> {
+    const claim = await this.claimRepository.findOne({ where: { id: claimId, userId } });
+    if (!claim) throw new NotFoundException('认领记录不存在');
+    if (claim.status !== ClaimStatus.SAMPLE_REVIEW) {
+      throw new BadRequestException('当前状态不可提交采样');
+    }
+    claim.sampleFileId = sampleFileId;
+    return this.claimRepository.save(claim);
+  }
+
+  /** 获取采样审核列表 */
+  async getSampleClaims(page = 1, pageSize = 20, teamId?: string) {
+    const qb = this.claimRepository.createQueryBuilder('claim')
+      .leftJoinAndSelect('claim.task', 'task')
+      .leftJoinAndSelect('claim.user', 'user')
+      .leftJoinAndSelect('task.team', 'team')
+      .where('claim.status = :status', { status: ClaimStatus.SAMPLE_REVIEW });
+    if (teamId) qb.andWhere('task.teamId = :teamId', { teamId });
+    qb.orderBy('claim.createdAt', 'ASC').skip((page - 1) * pageSize).take(pageSize);
+    const [items, total] = await qb.getManyAndCount();
+    return { items, total, page, pageSize };
+  }
+
+  /** 审核通过采样 */
+  async approveSample(claimId: string): Promise<TaskClaim> {
+    const claim = await this.claimRepository.findOne({ where: { id: claimId }, relations: ['task'] });
+    if (!claim) throw new NotFoundException('认领记录不存在');
+    if (claim.status !== ClaimStatus.SAMPLE_REVIEW) throw new BadRequestException('当前状态不可审核');
+
+    claim.status = ClaimStatus.CLAIMED;
+    claim.sampleReviewedAt = new Date();
+    await this.claimRepository.save(claim);
+
+    // Update claimedQuantity + auto-assign texts
+    claim.task.claimedQuantity = Number(claim.task.claimedQuantity) + 1;
+    if (claim.task.status === TaskStatus.PUBLISHED) claim.task.status = TaskStatus.IN_PROGRESS;
+    await this.taskRepository.save(claim.task);
+
+    const hasTexts = await this.textCollectionRepository.count({ where: { taskId: claim.taskId } });
+    if (hasTexts > 0) await this.autoAssignTextsForClaim(claim.task, claim);
+
+    return claim;
+  }
+
+  /** 驳回采样 */
+  async rejectSample(claimId: string, reason: string): Promise<TaskClaim> {
+    const claim = await this.claimRepository.findOne({ where: { id: claimId } });
+    if (!claim) throw new NotFoundException('认领记录不存在');
+    if (claim.status !== ClaimStatus.SAMPLE_REVIEW) throw new BadRequestException('当前状态不可审核');
+
+    claim.status = ClaimStatus.SAMPLE_REJECTED;
+    claim.sampleRejectReason = reason;
+    claim.sampleReviewedAt = new Date();
+    return this.claimRepository.save(claim);
   }
 }

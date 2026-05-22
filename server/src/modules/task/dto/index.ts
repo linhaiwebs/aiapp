@@ -168,6 +168,11 @@ export class CreateTaskDto {
   @IsOptional()
   reviewRounds?: number;
 
+  @ApiProperty({ description: '是否要求采样审核', required: false })
+  @IsBoolean()
+  @IsOptional()
+  requireSample?: boolean;
+
   @ApiProperty({ description: '回收时间(小时)', required: false })
   @IsNumber()
   @IsOptional()
@@ -324,6 +329,10 @@ export class UpdateTaskDto {
   @IsNumber()
   @IsOptional()
   reviewRounds?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  requireSample?: boolean;
 
   @IsNumber()
   @IsOptional()

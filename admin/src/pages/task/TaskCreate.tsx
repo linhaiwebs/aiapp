@@ -418,6 +418,13 @@ export default function TaskForm() {
                         </Form.Item>
                       </Col>
                     </Row>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item name="requireSample" label="采样审核" valuePropName="checked" tooltip="开启后采集员领取任务需先上传样音/样图，审核通过后方可开始采集">
+                          <Switch />
+                        </Form.Item>
+                      </Col>
+                    </Row>
                   </>
                 ),
               },

@@ -202,6 +202,52 @@ export class TaskController {
     return { message: '已删除' };
   }
 
+  @Post('claims/:claimId/submit-sample')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '提交采样文件' })
+  async submitSample(
+    @Param('claimId') claimId: string,
+    @CurrentUser('userId') userId: string,
+    @Body('sampleFileId') sampleFileId: string,
+  ) {
+    return this.taskService.submitSample(claimId, userId, sampleFileId);
+  }
+
+  @Get('claims/sample-review')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.LEADER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '采样审核列表' })
+  async getSampleClaims(
+    @Query('page') page = 1,
+    @Query('pageSize') pageSize = 20,
+    @Query('teamId') teamId?: string,
+  ) {
+    return this.taskService.getSampleClaims(page, pageSize, teamId);
+  }
+
+  @Post('claims/:claimId/approve-sample')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.LEADER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '通过采样审核' })
+  async approveSample(@Param('claimId') claimId: string) {
+    return this.taskService.approveSample(claimId);
+  }
+
+  @Post('claims/:claimId/reject-sample')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.LEADER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: '驳回采样' })
+  async rejectSample(
+    @Param('claimId') claimId: string,
+    @Body('reason') reason: string,
+  ) {
+    return this.taskService.rejectSample(claimId, reason);
+  }
+
   @Post('claims/:claimId/reject')
   @UseGuards(AuthGuard('jwt'))
   @ApiBearerAuth()
