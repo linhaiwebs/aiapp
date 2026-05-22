@@ -66,10 +66,14 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
   }
 
   Future<void> _loadData() async {
+    _log('_loadData started, claimId=${widget.claimId}');
     try {
       final claims = await ref.read(taskServiceProvider).getMyClaims();
+      _log('got ${claims.length} claims');
       final claim = claims.where((c) => c.id == widget.claimId).firstOrNull;
+      _log('found claim: ${claim != null}, taskType=${claim?.taskType}');
       final texts = await ref.read(textCollectionServiceProvider).getMyTexts(widget.claimId);
+      _log('got ${texts.length} texts from getMyTexts');
 
       final fileIds = <String, String>{};
       final durations = <String, double>{};
