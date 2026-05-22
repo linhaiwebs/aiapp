@@ -21,7 +21,8 @@ import '../../../core/services/submission_service.dart';
 import '../../../core/services/file_service.dart';
 import '../../../core/network/dio_client.dart';
 import '../widgets/audio_check_dialog.dart';
-import '../widgets/sound_wave_background.dart';
+import '../widgets/audio_wave_widget.dart';
+import '../widgets/green_dot_background.dart';
 
 class TextCarouselPage extends ConsumerStatefulWidget {
   final String claimId;
@@ -45,6 +46,7 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
   final AudioRecorder _recorder = AudioRecorder();
   final AudioPlayer _player = AudioPlayer();
   bool _audioCheckPassed = false;
+  final StreamController<double> _amplitudeCtrl = StreamController<double>.broadcast();
 
   // Completed map: textId -> fileId
   Map<String, String> _recordingFileIds = {};
@@ -167,6 +169,10 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
       });
+      // Amplitude stream for wave visualization
+      _recorder.onAmplitudeChanged(const Duration(milliseconds: 80)).listen((amp) {
+        _amplitudeCtrl.add(amp.current);
+      });
       setState(() {
         _isRecording = true;
         _recordingTextId = textId;
@@ -286,10 +292,17 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
   Future<void> _playRecording(String textId) async {
     final fileId = _recordingFileIds[textId];
     if (fileId == null) return;
-    final serverBase = ref.read(dioProvider).dio.options.baseUrl;
-    final url = '$serverBase/files/$fileId/stream';
-    await _player.stop();
-    await _player.play(UrlSource(url));
+    try {
+      // Download via Dio (with auth headers) then play locally
+      final url = '/files/$fileId/stream';
+      final dir = await getTemporaryDirectory();
+      final tempFile = File('${dir.path}/playback_$fileId.m4a');
+      await ref.read(dioProvider).dio.download(url, tempFile.path);
+      await _player.stop();
+      await _player.play(DeviceFileSource(tempFile.path));
+    } catch (e) {
+      _log('playback error: $e');
+    }
   }
 
   // ─── Submit ─────────────────────────────────────────────────
@@ -359,6 +372,7 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
                       itemBuilder: (ctx, i) => _buildCard(_texts[i], i),
                     ),
                   ),
+                  AudioWaveWidget(amplitudeStream: _amplitudeCtrl.stream, isRecording: _isRecording),
                   _buildBottomBar(),
                 ],
               );
@@ -385,7 +399,7 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       ),
       body: Stack(
         children: [
-          const Positioned.fill(child: SoundWaveBackground()),
+          const Positioned.fill(child: GreenDotBackground()),
           mainBody,
         ],
       ),
