@@ -127,7 +127,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
             amplitudeStream: stream,
             stopCheck: () => _recorder.stop(),
           );
-          await _recorder.stop();
+          try { await _recorder.stop(); } catch (_) {}
           if (result == null || !result.allPassed) return;
           await Future.delayed(const Duration(milliseconds: 500));
         }

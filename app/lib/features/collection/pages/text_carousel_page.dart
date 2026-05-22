@@ -130,7 +130,8 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
             amplitudeStream: stream,
             stopCheck: () => _recorder.stop(),
           );
-          await _recorder.stop();
+          // Dialog already stops recorder via stopCheck; ensure stopped
+          try { await _recorder.stop(); } catch (_) {}
           if (result == null || !result.allPassed) return;
           await Future.delayed(const Duration(milliseconds: 500));
         }
