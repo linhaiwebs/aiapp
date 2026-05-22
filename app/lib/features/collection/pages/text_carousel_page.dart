@@ -301,13 +301,14 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       return;
     }
     try {
-      _log('playback: downloading fileId=$fileId');
-      final dir = await getTemporaryDirectory();
-      final tempFile = File('${dir.path}/playback_$fileId.m4a');
-      await ref.read(dioProvider).dio.download('/files/$fileId/stream', tempFile.path);
-      _log('playback: download done, size=${await tempFile.length()}');
+      _log('playback: getting download URL for fileId=$fileId');
+      // 先通过API获取预签名下载URL（OSS模式下返回CDN或预签名URL）
+      final res = await ref.read(dioProvider).dio.get('/files/$fileId/download-url');
+      final downloadUrl = res.data['url'] as String;
+      _log('playback: downloadUrl=$downloadUrl');
       await _player.stop();
-      await _player.play(DeviceFileSource(tempFile.path));
+      // 用 audioplayers 直接播放URL（不经过Dio auth拦截）
+      await _player.play(UrlSource(downloadUrl));
       _log('playback: playing');
     } catch (e) {
       _log('playback error: $e');
