@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,7 +6,12 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/models/task_model.dart';
 import '../../../core/services/task_service.dart';
+import '../../../core/services/file_service.dart';
 import '../../../shared/widgets/skeleton.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// 任务大厅 — 未领取的可用任务列表
 
@@ -52,6 +58,34 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
 
   Future<void> _claimTask(TaskModel task) async {
     if (_claimingTaskId != null) return;
+
+    // 采样审核：先弹采样录制
+    if (task.requireSample) {
+      final sampleFileId = await _showSampleRecording(task);
+      if (sampleFileId == null) return; // 用户取消
+
+      setState(() => _claimingTaskId = task.id);
+      try {
+        // 先领取（状态为 SAMPLE_REVIEW）
+        final claimRes = await ref.read(taskServiceProvider).claim(task.id);
+        final claimId = (claimRes as dynamic)['id'] as String;
+        // 提交采样文件
+        await ref.read(taskServiceProvider).submitSample(claimId, sampleFileId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('采样已提交，等待审核'), backgroundColor: AppColors.secondary),
+          );
+          context.go('/home');
+        }
+      } catch (e) {
+        _showClaimError(e);
+      } finally {
+        if (mounted) setState(() => _claimingTaskId = null);
+      }
+      return;
+    }
+
+    // 正常领取流程
     setState(() => _claimingTaskId = task.id);
     try {
       await ref.read(taskServiceProvider).claim(task.id);
@@ -62,37 +96,105 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
         context.go('/home');
       }
     } catch (e) {
-      if (mounted) {
-        String msg = e.toString();
-        // Try to extract server error message from DioException
-        try {
-          final dioErr = e as dynamic;
-          final serverMsg = dioErr.response?.data?.message;
-          if (serverMsg is String && serverMsg.isNotEmpty) msg = serverMsg;
-        } catch (_) {}
-        String userMsg = '领取失败，请稍后重试';
-        if (msg.contains('已申请') || msg.contains('已领取')) {
-          userMsg = '您已领取过该任务，可在"我的任务"中查看';
-        } else if (msg.contains('不可申请')) {
-          userMsg = '任务当前不可申请';
-        } else if (msg.contains('截止时间')) {
-          userMsg = '任务已过截止时间';
-        } else if (msg.contains('质量分不足')) {
-          userMsg = '质量分不足，无法申请此任务';
-        } else if (msg.contains('仅团队成员可领取')) {
-          userMsg = '仅团队成员可领取此任务';
-        } else if (msg.contains('已被领完')) {
-          userMsg = '任务已被领完';
-        } else if (msg.contains('封禁')) {
-          userMsg = '账号已被封禁，无法申请任务';
-        }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(userMsg), backgroundColor: AppColors.error),
-        );
-      }
+      _showClaimError(e);
     } finally {
       if (mounted) setState(() => _claimingTaskId = null);
     }
+  }
+
+  void _showClaimError(dynamic e) {
+    if (!mounted) return;
+    String msg = e.toString();
+    try {
+      final dioErr = e as dynamic;
+      final serverMsg = dioErr.response?.data?.message;
+      if (serverMsg is String && serverMsg.isNotEmpty) msg = serverMsg;
+    } catch (_) {}
+    String userMsg = '领取失败，请稍后重试';
+    if (msg.contains('已申请') || msg.contains('已领取')) {
+      userMsg = '您已领取过该任务，可在"我的任务"中查看';
+    } else if (msg.contains('不可申请')) {
+      userMsg = '任务当前不可申请';
+    } else if (msg.contains('截止时间')) { userMsg = '任务已过截止时间'; }
+    else if (msg.contains('质量分不足')) { userMsg = '质量分不足，无法申请此任务'; }
+    else if (msg.contains('仅团队成员可领取')) { userMsg = '仅团队成员可领取此任务'; }
+    else if (msg.contains('已被领完')) { userMsg = '任务已被领完'; }
+    else if (msg.contains('封禁')) { userMsg = '账号已被封禁，无法申请任务'; }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(userMsg), backgroundColor: AppColors.error));
+  }
+
+  /// 采样录制弹窗，返回 fileId 或 null（取消）
+  Future<String?> _showSampleRecording(TaskModel task) async {
+    final recorder = AudioRecorder();
+    bool hasPermission = await recorder.hasPermission();
+    if (!hasPermission) {
+      final granted = await Permission.microphone.request();
+      if (!granted.isGranted) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('需要麦克风权限'), backgroundColor: AppColors.error));
+        return null;
+      }
+    }
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          bool isRecording = false;
+          int seconds = 0;
+          Timer? timer;
+          String? uploadedFileId;
+
+          Future<void> startRecord() async {
+            final dir = await getTemporaryDirectory();
+            final path = '${dir.path}/sample_${DateTime.now().millisecondsSinceEpoch}.m4a';
+            await recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: path);
+            setState(() { isRecording = true; seconds = 0; });
+            timer = Timer.periodic(const Duration(seconds: 1), (_) { setState(() => seconds++); });
+          }
+
+          Future<void> stopAndUpload() async {
+            timer?.cancel();
+            final path = await recorder.stop();
+            if (path == null) { setState(() => isRecording = false); return; }
+            setState(() => isRecording = false);
+            try {
+              final result = await ref.read(fileServiceProvider).simpleUpload(path, taskId: task.id, taskType: task.type.name);
+              uploadedFileId = result['id'] as String;
+              setState(() {});
+            } catch (e) {
+              if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('上传失败: $e'), backgroundColor: AppColors.error));
+            }
+          }
+
+          return AlertDialog(
+            title: Text('录制样音 - ${task.title}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('请按要求录制一段语音作为采样，审核通过后方可领取任务。', style: TextStyle(fontSize: 13)),
+                const SizedBox(height: 16),
+                if (isRecording)
+                  Text('录音中: ${seconds}s', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.error))
+                else if (uploadedFileId != null)
+                  const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: AppColors.secondary), SizedBox(width: 8), Text('采样已上传', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600))])
+                else
+                  const Text('点击下方按钮开始录制', style: TextStyle(fontSize: 14, color: Colors.grey)),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () { timer?.cancel(); recorder.dispose(); Navigator.pop(ctx); }, child: const Text('取消')),
+              if (!isRecording && uploadedFileId == null)
+                ElevatedButton.icon(onPressed: startRecord, icon: const Icon(Icons.mic), label: const Text('开始录制'))
+              else if (isRecording)
+                ElevatedButton.icon(onPressed: stopAndUpload, icon: const Icon(Icons.stop), label: const Text('停止录制'), style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white))
+              else if (uploadedFileId != null)
+                ElevatedButton(onPressed: () { timer?.cancel(); recorder.dispose(); Navigator.pop(ctx, uploadedFileId); }, child: const Text('提交采样')),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override

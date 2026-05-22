@@ -548,6 +548,8 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   Color _statusColor(ClaimStatus status) => switch (status) {
     ClaimStatus.pendingApproval => AppColors.orange,
+    ClaimStatus.sampleReview => AppColors.orange,
+    ClaimStatus.sampleRejected => AppColors.error,
     ClaimStatus.claimed || ClaimStatus.inProgress => AppColors.primary,
     ClaimStatus.submitted => AppColors.orange,
     ClaimStatus.completed => AppColors.secondary,
@@ -557,6 +559,8 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   String _statusLabel(ClaimStatus status) => switch (status) {
     ClaimStatus.pendingApproval => '待审批',
+    ClaimStatus.sampleReview => '采样审核中',
+    ClaimStatus.sampleRejected => '采样驳回',
     ClaimStatus.claimed => '已领取',
     ClaimStatus.inProgress => '进行中',
     ClaimStatus.submitted => '已提交',

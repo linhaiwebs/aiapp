@@ -81,6 +81,11 @@ class TaskService {
     return res.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> submitSample(String claimId, String sampleFileId) async {
+    final res = await _client.dio.post('/tasks/claims/$claimId/submit-sample', data: {'sampleFileId': sampleFileId});
+    return res.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> approveClaim(String claimId) async {
     final res = await _client.dio.post('/tasks/claims/$claimId/approve');
     return res.data as Map<String, dynamic>;

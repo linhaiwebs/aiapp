@@ -9,6 +9,8 @@ int _toInt(dynamic v, [int defaults = 0]) {
 
 enum ClaimStatus {
   pendingApproval, // backend: pending_approval
+  sampleReview,    // backend: sample_review — 采样审核中
+  sampleRejected,  // backend: sample_rejected — 采样驳回
   claimed,
   inProgress,   // backend: in_progress
   submitted,
@@ -38,6 +40,8 @@ class TaskClaimModel {
   final bool gainDetection; // from joined task
   final bool silenceDetection; // from joined task
   final int noiseLimit; // from joined task
+  final String? sampleFileId; // 采样文件ID
+  final String? sampleRejectReason; // 采样驳回原因
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -61,6 +65,8 @@ class TaskClaimModel {
     this.gainDetection = false,
     this.silenceDetection = false,
     this.noiseLimit = 60,
+    this.sampleFileId,
+    this.sampleRejectReason,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -93,12 +99,16 @@ class TaskClaimModel {
         gainDetection: json['task']?['gainDetection'] as bool? ?? false,
         silenceDetection: json['task']?['silenceDetection'] as bool? ?? false,
         noiseLimit: _toInt(json['task']?['noiseLimit'], 60),
+        sampleFileId: json['sampleFileId'] as String?,
+        sampleRejectReason: json['sampleRejectReason'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
       );
 
   String get statusLabel => switch (status) {
         ClaimStatus.pendingApproval => '待审批',
+        ClaimStatus.sampleReview => '采样审核中',
+        ClaimStatus.sampleRejected => '采样驳回',
         ClaimStatus.claimed => '已领取',
         ClaimStatus.inProgress => '采集中',
         ClaimStatus.submitted => '已提交',
@@ -113,6 +123,8 @@ ClaimStatus _parseClaimStatus(String? value) {
   if (value == null) return ClaimStatus.claimed;
   return switch (value) {
     'pending_approval' => ClaimStatus.pendingApproval,
+    'sample_review' => ClaimStatus.sampleReview,
+    'sample_rejected' => ClaimStatus.sampleRejected,
     'claimed' => ClaimStatus.claimed,
     'in_progress' || 'inProgress' => ClaimStatus.inProgress,
     'submitted' => ClaimStatus.submitted,

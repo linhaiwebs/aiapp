@@ -46,6 +46,8 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
 
   Color _statusColor(ClaimStatus status) => switch (status) {
     ClaimStatus.pendingApproval => AppColors.orange,
+    ClaimStatus.sampleReview => AppColors.orange,
+    ClaimStatus.sampleRejected => AppColors.error,
     ClaimStatus.claimed => AppColors.primary,
     ClaimStatus.inProgress => AppColors.primary,
     ClaimStatus.submitted => AppColors.orange,
@@ -59,6 +61,7 @@ class _MyTasksPageState extends ConsumerState<MyTasksPage> with SingleTickerProv
   String _actionLabel(ClaimStatus status) => switch (status) {
     ClaimStatus.claimed || ClaimStatus.inProgress => '继续采集',
     ClaimStatus.pendingApproval => '等待审批',
+    ClaimStatus.sampleReview => '等待审核',
     _ => '查看详情',
   };
 
