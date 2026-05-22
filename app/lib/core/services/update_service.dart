@@ -102,7 +102,7 @@ class UpdateService {
     );
   }
 
-  /// 在 APP 内下载并显示进度条
+  /// 在 APP 内下载并显示进度条 — 直接替换更新弹窗内容
   Future<void> _startDownload(BuildContext dialogCtx, BuildContext pageCtx, UpdateInfo info) async {
     if (info.downloadUrl.isEmpty) {
       ScaffoldMessenger.of(pageCtx).showSnackBar(
@@ -111,25 +111,20 @@ class UpdateService {
       return;
     }
 
-    // Pop update dialog first
+    // Replace current dialog with download progress
     Navigator.pop(dialogCtx);
-    // Wait for dialog close animation
-    await Future.delayed(const Duration(milliseconds: 300));
-
-    if (!pageCtx.mounted) return;
-
-    // Show download progress dialog
     showDialog(
       context: pageCtx,
       barrierDismissible: false,
-      builder: (ctx) => _DownloadProgressDialog(
+      builder: (_) => _DownloadProgressDialog(
         downloadUrl: info.downloadUrl,
         onDone: (filePath) {
-          Navigator.pop(ctx);
+          // Pop download dialog then open installer
+          Navigator.of(pageCtx, rootNavigator: true).pop();
           OpenFilex.open(filePath);
         },
         onError: (msg) {
-          Navigator.pop(ctx);
+          Navigator.of(pageCtx, rootNavigator: true).pop();
           ScaffoldMessenger.of(pageCtx).showSnackBar(
             SnackBar(content: Text('下载失败: $msg'), backgroundColor: Colors.red),
           );
