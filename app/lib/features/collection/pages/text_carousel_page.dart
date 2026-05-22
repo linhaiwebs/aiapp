@@ -291,17 +291,31 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
 
   Future<void> _playRecording(String textId) async {
     final fileId = _recordingFileIds[textId];
-    if (fileId == null) return;
+    if (fileId == null) {
+      _log('playback: no fileId for textId=$textId');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('没有找到录音文件'), backgroundColor: AppColors.orange),
+        );
+      }
+      return;
+    }
     try {
-      // Download via Dio (with auth headers) then play locally
-      final url = '/files/$fileId/stream';
+      _log('playback: downloading fileId=$fileId');
       final dir = await getTemporaryDirectory();
       final tempFile = File('${dir.path}/playback_$fileId.m4a');
-      await ref.read(dioProvider).dio.download(url, tempFile.path);
+      await ref.read(dioProvider).dio.download('/files/$fileId/stream', tempFile.path);
+      _log('playback: download done, size=${await tempFile.length()}');
       await _player.stop();
       await _player.play(DeviceFileSource(tempFile.path));
+      _log('playback: playing');
     } catch (e) {
       _log('playback error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('播放失败: $e'), backgroundColor: AppColors.error),
+        );
+      }
     }
   }
 
