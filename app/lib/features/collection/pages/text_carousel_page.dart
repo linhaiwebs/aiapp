@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
@@ -251,11 +252,19 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       });
       _log('card marked complete OK');
     } catch (e, stack) {
-      _log('stopRecording ERROR: $e\n$stack');
+      // Extract server error message from DioException
+      String errMsg = e.toString();
+      try {
+        final dioErr = e as dynamic;
+        final serverResp = dioErr.response?.data;
+        if (serverResp != null) {
+          errMsg = 'HTTP ${dioErr.response.statusCode}: ${serverResp is Map ? (serverResp['message'] ?? serverResp['error'] ?? jsonEncode(serverResp)) : serverResp}';
+        }
+      } catch (_) {}
+      _log('stopRecording ERROR: $errMsg\n$stack');
       setState(() { _isRecording = false; _recordingTextId = null; _recordingDuration = Duration.zero; });
       if (mounted) {
-        final errStr = e.toString();
-        showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('录音提交失败'), content: Text(errStr.length > 200 ? '${errStr.substring(0, 200)}...' : errStr), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('确定'))]));
+        showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('录音提交失败'), content: Text(errMsg.length > 300 ? '${errMsg.substring(0, 300)}...' : errMsg), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('确定'))]));
       }
     }
   }
