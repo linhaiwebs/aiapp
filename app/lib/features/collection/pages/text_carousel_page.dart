@@ -102,24 +102,33 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
 
   // ─── Recording ──────────────────────────────────────────────
 
+  void _log(String msg) => debugPrint('[REC] $msg');
+
   Future<void> _startRecording(String textId) async {
+    _log('startRecording called for textId=$textId');
     final hasPermission = await _recorder.hasPermission();
+    _log('hasPermission=$hasPermission');
     if (!hasPermission) {
       final granted = await Permission.microphone.request();
+      _log('requested permission: granted=$granted');
       if (!granted.isGranted) return;
     }
 
     try {
       final dir = await getTemporaryDirectory();
+      _log('temp dir=${dir.path}');
 
       // Pre-recording audio check — use the same recorder to avoid conflicts
       if (!_audioCheckPassed) {
         final needsCheck = _claim?.signalDetection == true ||
             _claim?.gainDetection == true ||
             _claim?.silenceDetection == true;
+        _log('audioCheck not passed yet, needsCheck=$needsCheck (sig=${_claim?.signalDetection} gain=${_claim?.gainDetection} silence=${_claim?.silenceDetection})');
         if (needsCheck) {
-          final checkPath = '${dir.path}/check_${DateTime.now().millisecondsSinceEpoch}.m4a';
+          final checkPath = '${dir.path}/check.m4a';
+          _log('starting check recording, path=$checkPath');
           await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1), path: checkPath);
+          _log('check recording started');
           final stream = _recorder.onAmplitudeChanged(const Duration(milliseconds: 100));
           final result = await showAudioCheckDialog(
             context: context,
@@ -130,17 +139,23 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
             amplitudeStream: stream,
             stopCheck: () => _recorder.stop(),
           );
-          // Dialog already stops recorder via stopCheck; ensure stopped
-          try { await _recorder.stop(); } catch (_) {}
-          if (result == null || !result.allPassed) return;
-          await Future.delayed(const Duration(milliseconds: 500));
+          _log('check dialog closed, result=${result != null}, allPassed=${result?.allPassed}');
+          try { await _recorder.stop(); } catch (e) { _log('check stop cleanup: $e'); }
+          if (result == null || !result.allPassed) {
+            _log('check failed or cancelled, aborting');
+            return;
+          }
+          _log('check passed, waiting 1s for recorder release');
+          await Future.delayed(const Duration(seconds: 1));
         }
         _audioCheckPassed = true;
       }
 
-      // Start opus recording
-      final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: opusPath);
+      // Start recording
+      final recPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      _log('starting real recording, path=$recPath');
+      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: recPath);
+      _log('real recording started OK');
 
       _timer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
@@ -149,30 +164,43 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
         _isRecording = true;
         _recordingTextId = textId;
       });
-    } catch (e) {
+    } catch (e, stack) {
+      _log('startRecording ERROR: $e\n$stack');
       try { await _recorder.stop(); } catch (_) {}
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('录音失败: $e', style: const TextStyle(color: Colors.white)), backgroundColor: AppColors.error),
-        );
+        showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('录音启动失败'), content: Text('$e'), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('确定'))]));
       }
     }
   }
 
   Future<void> _stopRecording(String textId) async {
+    _log('stopRecording called for textId=$textId');
     _timer?.cancel();
     try {
       final path = await _recorder.stop();
+      _log('recorder stopped, path=$path');
       if (path == null) {
+        _log('ERROR: path is null after stop');
         setState(() { _isRecording = false; _recordingTextId = null; _recordingDuration = Duration.zero; });
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('录音失败：无法获取录音文件，请重试'), backgroundColor: AppColors.error),
-          );
+          showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('录音失败'), content: const Text('无法获取录音文件，请重试'), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('确定'))]));
         }
         return;
       }
       if (!mounted) return;
+
+      final file = File(path);
+      final exists = await file.exists();
+      final size = exists ? await file.length() : -1;
+      _log('file exists=$exists, size=$size bytes');
+      if (!exists || size <= 0) {
+        _log('ERROR: file missing or empty');
+        setState(() { _isRecording = false; _recordingTextId = null; _recordingDuration = Duration.zero; });
+        if (mounted) {
+          showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('录音失败'), content: const Text('录音文件无效，请重试'), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('确定'))]));
+        }
+        return;
+      }
 
       final dur = _recordingDuration;
       setState(() {
@@ -182,11 +210,12 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       });
 
       // Upload
+      _log('starting upload, taskId=${_claim?.taskId}');
       Map<String, dynamic> fileEntity;
       if (kIsWeb) {
         final bytes = (await Dio().get(path, options: Options(responseType: ResponseType.bytes))).data as Uint8List;
         fileEntity = await ref.read(fileServiceProvider).simpleUploadBytes(
-          fileName: 'rec_opus_${DateTime.now().millisecondsSinceEpoch}.opus',
+          fileName: 'rec_${DateTime.now().millisecondsSinceEpoch}.m4a',
           bytes: bytes,
           taskId: _claim?.taskId,
           taskType: 'audio',
@@ -197,26 +226,30 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
           taskType: 'audio',
         );
       }
+      _log('upload done, result=$fileEntity');
 
       if (!mounted) return;
       final fileId = fileEntity['id'] as String;
+      _log('fileId=$fileId, updating text status');
 
       await ref.read(textCollectionServiceProvider).updateStatus(
         textId, 'completed',
         fileId: fileId,
       );
+      _log('updateStatus done');
 
       if (!mounted) return;
       setState(() {
         _recordingFileIds[textId] = fileId;
         _durations[textId] = dur.inMilliseconds / 1000.0;
       });
-    } catch (e) {
+      _log('card marked complete OK');
+    } catch (e, stack) {
+      _log('stopRecording ERROR: $e\n$stack');
       setState(() { _isRecording = false; _recordingTextId = null; _recordingDuration = Duration.zero; });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('录音失败: $e'), backgroundColor: AppColors.error),
-        );
+        final errStr = e.toString();
+        showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('录音提交失败'), content: Text(errStr.length > 200 ? '${errStr.substring(0, 200)}...' : errStr), actions: [TextButton(onPressed: ()=>Navigator.pop(ctx), child: const Text('确定'))]));
       }
     }
   }
