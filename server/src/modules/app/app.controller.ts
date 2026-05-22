@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post, Body } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('应用')
@@ -14,5 +14,12 @@ export class AppController {
       changelog: process.env.APP_CHANGELOG || '',
       forceUpdate: process.env.APP_FORCE_UPDATE === 'true',
     };
+  }
+
+  @Post('log')
+  @ApiOperation({ summary: '客户端调试日志（仅打印到服务端控制台）' })
+  clientLog(@Body() body: { tag: string; msg: string }) {
+    console.log(`[CLIENT:${body.tag || 'INFO'}] ${body.msg || ''}`);
+    return { ok: true };
   }
 }

@@ -102,7 +102,13 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
 
   // ─── Recording ──────────────────────────────────────────────
 
-  void _log(String msg) => debugPrint('[REC] $msg');
+  void _log(String msg) {
+    debugPrint('[REC] $msg');
+    // Also send to server so logs are visible via docker logs
+    try {
+      ref.read(dioProvider).dio.post('/app/log', data: {'tag': 'REC', 'msg': msg});
+    } catch (_) { /* best-effort, don't block */ }
+  }
 
   Future<void> _startRecording(String textId) async {
     _log('startRecording called for textId=$textId');
