@@ -140,81 +140,13 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
     final sampleLines = instructions.split('\n').where((l) => l.trim().isNotEmpty).take(3).toList();
     final sampleText = sampleLines.isNotEmpty ? sampleLines.join('\n') : '请朗读一段语音';
 
-    return showDialog<String>(
+    final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) {
-          bool isRecording = false;
-          int seconds = 0;
-          Timer? timer;
-          String? uploadedFileId;
-
-          Future<void> startRecord() async {
-            final dir = await getTemporaryDirectory();
-            final path = '${dir.path}/sample_${DateTime.now().millisecondsSinceEpoch}.m4a';
-            await recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: path);
-            setState(() { isRecording = true; seconds = 0; });
-            timer = Timer.periodic(const Duration(seconds: 1), (_) { setState(() => seconds++); });
-          }
-
-          Future<void> stopAndUpload() async {
-            timer?.cancel();
-            final path = await recorder.stop();
-            if (path == null) { setState(() => isRecording = false); return; }
-            setState(() => isRecording = false);
-            try {
-              final result = await ref.read(fileServiceProvider).simpleUpload(path, taskId: task.id, taskType: task.type.name);
-              uploadedFileId = result['id'] as String;
-              setState(() {});
-            } catch (e) {
-              if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('上传失败: $e'), backgroundColor: AppColors.error));
-            }
-          }
-
-          return AlertDialog(
-            title: Text('录制样音 - ${task.title}'),
-            content: SizedBox(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('请朗读以下文本作为采样', style: TextStyle(fontSize: 13, color: Colors.grey)),
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1C1C1E),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white12),
-                    ),
-                    child: Text(sampleText, style: const TextStyle(fontSize: 16, height: 1.6, color: Color(0xFFE5E2E1))),
-                  ),
-                  const SizedBox(height: 16),
-                  if (isRecording)
-                    Center(child: Text('录音中: ${seconds}s', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.error)))
-                  else if (uploadedFileId != null)
-                    const Center(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: AppColors.secondary), SizedBox(width: 8), Text('采样已上传', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600))]))
-                  else
-                    const Center(child: Text('点击下方按钮开始录制', style: TextStyle(fontSize: 14, color: Colors.grey))),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () { timer?.cancel(); recorder.dispose(); Navigator.pop(ctx); }, child: const Text('取消')),
-              if (!isRecording && uploadedFileId == null)
-                ElevatedButton.icon(onPressed: startRecord, icon: const Icon(Icons.mic), label: const Text('开始录制'))
-              else if (isRecording)
-                ElevatedButton.icon(onPressed: stopAndUpload, icon: const Icon(Icons.stop), label: const Text('停止录制'), style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white))
-              else if (uploadedFileId != null)
-                ElevatedButton(onPressed: () { timer?.cancel(); recorder.dispose(); Navigator.pop(ctx, uploadedFileId); }, child: const Text('提交采样')),
-            ],
-          );
-        },
-      ),
+      builder: (ctx) => _SampleRecordDialog(task: task, recorder: recorder, ref: ref),
     );
+    recorder.dispose();
+    return result;
   }
 
   @override
@@ -511,4 +443,86 @@ class _TaskTypeCfg {
   final IconData icon;
   final Color color;
   const _TaskTypeCfg(this.icon, this.color);
+}
+
+// ─── Sample Recording Dialog ───────────────────────────────────
+
+class _SampleRecordDialog extends StatefulWidget {
+  final TaskModel task;
+  final AudioRecorder recorder;
+  final WidgetRef ref;
+  const _SampleRecordDialog({required this.task, required this.recorder, required this.ref});
+
+  @override State<_SampleRecordDialog> createState() => _SampleRecordDialogState();
+}
+
+class _SampleRecordDialogState extends State<_SampleRecordDialog> {
+  bool _isRecording = false;
+  int _seconds = 0;
+  Timer? _timer;
+  String? _uploadedFileId;
+
+  final instructions = '';
+
+  @override void initState() { super.initState(); }
+  @override void dispose() { _timer?.cancel(); super.dispose(); }
+
+  Future<void> _start() async {
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/sample_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await widget.recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: path);
+    setState(() { _isRecording = true; _seconds = 0; });
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted) setState(() => _seconds++); });
+  }
+
+  Future<void> _stop() async {
+    _timer?.cancel();
+    final path = await widget.recorder.stop();
+    if (path == null || !mounted) { setState(() => _isRecording = false); return; }
+    setState(() => _isRecording = false);
+    try {
+      final result = await widget.ref.read(fileServiceProvider).simpleUpload(path, taskId: widget.task.id, taskType: widget.task.type.name);
+      if (mounted) setState(() => _uploadedFileId = result['id'] as String);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('上传失败: $e'), backgroundColor: AppColors.error));
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    final inst = widget.task.instructions ?? widget.task.description ?? '';
+    final lines = inst.split('\n').where((l) => l.trim().isNotEmpty).take(3).toList();
+    final sampleText = lines.isNotEmpty ? lines.join('\n') : '请朗读一段语音';
+
+    return AlertDialog(
+      title: Text('录制样音 - ${widget.task.title}'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('请朗读以下文本作为采样', style: TextStyle(fontSize: 13, color: Colors.grey)),
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity, padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.white12)),
+            child: Text(sampleText, style: const TextStyle(fontSize: 16, height: 1.6, color: Color(0xFFE5E2E1))),
+          ),
+          const SizedBox(height: 16),
+          if (_isRecording)
+            Center(child: Text('录音中: ${_seconds}s', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.error)))
+          else if (_uploadedFileId != null)
+            const Center(child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.check_circle, color: AppColors.secondary), SizedBox(width: 8), Text('采样已上传', style: TextStyle(color: AppColors.secondary, fontWeight: FontWeight.w600))]))
+          else
+            const Center(child: Text('点击下方按钮开始录制', style: TextStyle(fontSize: 14, color: Colors.grey))),
+        ]),
+      ),
+      actions: [
+        TextButton(onPressed: () { _timer?.cancel(); Navigator.pop(context); }, child: const Text('取消')),
+        if (!_isRecording && _uploadedFileId == null)
+          ElevatedButton.icon(onPressed: _start, icon: const Icon(Icons.mic), label: const Text('开始录制'))
+        else if (_isRecording)
+          ElevatedButton.icon(onPressed: _stop, icon: const Icon(Icons.stop), label: const Text('停止录制'), style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white))
+        else if (_uploadedFileId != null)
+          ElevatedButton(onPressed: () { _timer?.cancel(); Navigator.pop(context, _uploadedFileId); }, child: const Text('提交采样')),
+      ],
+    );
+  }
 }
