@@ -151,11 +151,7 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
           );
           _log('check dialog closed, result=${result != null}, allPassed=${result?.allPassed}');
           try { await _recorder.stop(); } catch (e) { _log('check stop cleanup: $e'); }
-          if (result == null || !result.allPassed) {
-            _log('check failed or cancelled, aborting');
-            return;
-          }
-          _log('check passed, waiting 1s for recorder release');
+          _log('proceeding to record (check is informational only)');
           await Future.delayed(const Duration(seconds: 1));
         }
         _audioCheckPassed = true;

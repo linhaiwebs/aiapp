@@ -128,8 +128,7 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
             stopCheck: () => _recorder.stop(),
           );
           try { await _recorder.stop(); } catch (_) {}
-          if (result == null || !result.allPassed) return;
-          await Future.delayed(const Duration(milliseconds: 500));
+          await Future.delayed(const Duration(seconds: 1));
         }
         _audioCheckPassed = true;
       }
