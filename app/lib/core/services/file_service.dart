@@ -71,21 +71,16 @@ class FileService {
     final fileId = initRes['id'] as String;
     final presignedUrl = initRes['presignedUrl'] as String?;
 
-    if (presignedUrl != null) {
-      // OSS 直传：PUT 文件到 OSS，不经过服务端
-      await _putToOss(presignedUrl, filePath, mimeType, onProgress);
-    } else {
-      // MinIO / Local: 走传统多分片上传
-      final bytes = await file.readAsBytes();
-      final formData = FormData.fromMap({
-        'fileId': fileId,
-        'chunkIndex': 0,
-        'chunk': MultipartFile.fromBytes(bytes, filename: fileName),
-      });
-      await _client.dio.post('/files/chunk', data: formData,
-        onSendProgress: onProgress,
-      );
-    }
+    // 统一走服务端中转上传（避免手机直连 OSS 失败）
+    final bytes = await file.readAsBytes();
+    final formData = FormData.fromMap({
+      'fileId': fileId,
+      'chunkIndex': 0,
+      'chunk': MultipartFile.fromBytes(bytes, filename: fileName),
+    });
+    await _client.dio.post('/files/chunk', data: formData,
+      onSendProgress: onProgress,
+    );
 
     // Step 3: completeUpload — 确认文件已到位
     final completeRes = await completeUpload(fileId);
@@ -115,18 +110,15 @@ class FileService {
     final fileId = initRes['id'] as String;
     final presignedUrl = initRes['presignedUrl'] as String?;
 
-    if (presignedUrl != null) {
-      await _putToOssBytes(presignedUrl, bytes, mimeType, onProgress);
-    } else {
-      final formData = FormData.fromMap({
-        'fileId': fileId,
-        'chunkIndex': 0,
-        'chunk': MultipartFile.fromBytes(bytes, filename: fileName),
-      });
-      await _client.dio.post('/files/chunk', data: formData,
-        onSendProgress: onProgress,
-      );
-    }
+    // 统一走服务端中转上传
+    final formData = FormData.fromMap({
+      'fileId': fileId,
+      'chunkIndex': 0,
+      'chunk': MultipartFile.fromBytes(bytes, filename: fileName),
+    });
+    await _client.dio.post('/files/chunk', data: formData,
+      onSendProgress: onProgress,
+    );
 
     final completeRes = await completeUpload(fileId);
     return completeRes;
