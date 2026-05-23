@@ -67,7 +67,7 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
       setState(() => _claimingTaskId = task.id);
       try {
         final claimRes = await ref.read(taskServiceProvider).claim(task.id);
-        final claimId = (claimRes as dynamic)['id'] as String;
+        final claimId = claimRes.id;
         await ref.read(taskServiceProvider).submitSample(claimId, sampleFileId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
