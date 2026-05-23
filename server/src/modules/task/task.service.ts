@@ -257,10 +257,11 @@ export class TaskService {
       throw new BadRequestException('任务已被领完');
     }
 
-    // Check if already has a pending or active claim
+    // Check for existing active or pending claims
     const existingClaim = await this.claimRepository.findOne({
       where: [
         { userId, taskId, status: ClaimStatus.PENDING_APPROVAL },
+        { userId, taskId, status: ClaimStatus.SAMPLE_REVIEW },
         { userId, taskId, status: ClaimStatus.CLAIMED },
         { userId, taskId, status: ClaimStatus.IN_PROGRESS },
       ],
@@ -268,6 +269,11 @@ export class TaskService {
     if (existingClaim) {
       throw new BadRequestException('您已申请或领取了此任务');
     }
+
+    // If previously rejected (sample or claim), delete old record to allow retry
+    await this.claimRepository.delete({
+      userId, taskId, status: In([ClaimStatus.SAMPLE_REJECTED, ClaimStatus.REJECTED]),
+    } as any);
 
     // 已加入团队的会员领取本团队任务免审批，直接通过
     let claimStatus = ClaimStatus.PENDING_APPROVAL;

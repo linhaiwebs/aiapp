@@ -66,10 +66,8 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
 
       setState(() => _claimingTaskId = task.id);
       try {
-        // 先领取（状态为 SAMPLE_REVIEW）
         final claimRes = await ref.read(taskServiceProvider).claim(task.id);
         final claimId = (claimRes as dynamic)['id'] as String;
-        // 提交采样文件
         await ref.read(taskServiceProvider).submitSample(claimId, sampleFileId);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -78,7 +76,11 @@ class _TaskSquarePageState extends ConsumerState<TaskSquarePage> {
           context.go('/home');
         }
       } catch (e) {
-        _showClaimError(e);
+        String msg = e.toString();
+        try { final serverMsg = (e as dynamic).response?.data?.message; if (serverMsg is String) msg = serverMsg; } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('提交失败: $msg'), backgroundColor: AppColors.error),
+        );
       } finally {
         if (mounted) setState(() => _claimingTaskId = null);
       }
