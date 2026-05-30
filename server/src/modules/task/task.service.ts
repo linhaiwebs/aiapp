@@ -270,7 +270,11 @@ export class TaskService {
       throw new BadRequestException('您已申请或领取了此任务');
     }
 
-    // If previously rejected (sample or claim), delete old record to allow retry
+    // If previously rejected (sample or claim), clean up text assignments and delete old record
+    await this.textCollectionRepository.update(
+      { taskId, assignedUserId: userId, status: TextStatus.ASSIGNED },
+      { assignedUserId: null as any, assignedAt: null as any, status: TextStatus.PENDING },
+    );
     await this.claimRepository.delete({
       userId, taskId, status: In([ClaimStatus.SAMPLE_REJECTED, ClaimStatus.REJECTED]),
     } as any);
@@ -325,6 +329,12 @@ export class TaskService {
 
   /** 文本任务 — 按任务分配设置从 PENDING 池中取前 N 条分配给新领取者 */
   private async autoAssignTextsForClaim(task: Task, claim: TaskClaim): Promise<void> {
+    // 防止重复分配：如果用户已有分配文本，不再分配
+    const existingCount = await this.textCollectionRepository.count({
+      where: { taskId: task.id, assignedUserId: claim.userId },
+    });
+    if (existingCount > 0) return;
+
     // 计算每人分配条数
     let perUserCount = 0;
     if (task.textAssignMode === 'per_user' && (task.textPerUserCount ?? 0) > 0) {
@@ -505,6 +515,12 @@ export class TaskService {
       { id: claim.taskId },
       'claimedQuantity',
       1,
+    );
+
+    // 清理已分配的文本（回收至 PENDING 池，避免重领时重复分配）
+    await this.textCollectionRepository.update(
+      { taskId: claim.taskId, assignedUserId: claim.userId, status: TextStatus.ASSIGNED },
+      { assignedUserId: null as any, assignedAt: null as any, status: TextStatus.PENDING },
     );
   }
 

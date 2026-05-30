@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Space, Card, message, Modal, Input } from 'antd';
-import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import { taskApi } from '../../api';
+import AudioPlayerBar from '../../components/AudioPlayerBar';
 
 export default function SampleReview() {
   const [data, setData] = useState<any[]>([]);
@@ -10,6 +11,7 @@ export default function SampleReview() {
   const [page, setPage] = useState(1);
   const [rejectModal, setRejectModal] = useState<any>(null);
   const [reason, setReason] = useState('');
+  const [audioUrls, setAudioUrls] = useState<Record<string, string>>({});
 
   useEffect(() => { loadData(); }, [page]);
 
@@ -34,15 +36,17 @@ export default function SampleReview() {
     catch { message.error('操作失败'); }
   };
 
-  const playSample = async (fileId: string) => {
+  const ensureUrl = useCallback(async (fileId: string) => {
+    if (audioUrls[fileId]) return audioUrls[fileId];
     try {
-      // Get presigned download URL (avoids auth issue with plain <audio>)
       const res: any = await taskApi.getFileUrl(fileId);
       const url = res?.url || `/api/files/${fileId}/stream`;
-      const audio = new Audio(url);
-      audio.play();
-    } catch { message.error('播放失败'); }
-  };
+      setAudioUrls((prev) => ({ ...prev, [fileId]: url }));
+      return url;
+    } catch {
+      return `/api/files/${fileId}/stream`;
+    }
+  }, [audioUrls]);
 
   const columns = [
     { title: '申请人', key: 'user', render: (_: any, r: any) => r.user?.nickname || r.user?.phone || r.userId?.substring(0, 8) },
@@ -50,11 +54,8 @@ export default function SampleReview() {
     { title: '任务', key: 'task', ellipsis: true, render: (_: any, r: any) => r.task?.title || '-' },
     { title: '申请时间', dataIndex: 'createdAt', width: 160, render: (v: string) => v ? new Date(v).toLocaleString() : '-' },
     {
-      title: '样音', key: 'sample', width: 80,
-      render: (_: any, r: any) => r.sampleFileId ? (
-        <Button type="link" size="small" icon={<PlayCircleOutlined />}
-          onClick={() => playSample(r.sampleFileId)}>试听</Button>
-      ) : <span style={{ color: '#999' }}>未上传</span>
+      title: '样音', key: 'sample', width: 280,
+      render: (_: any, r: any) => <SampleAudioCell fileId={r.sampleFileId} ensureUrl={ensureUrl} />,
     },
     {
       title: '操作', key: 'action', width: 140,
@@ -79,4 +80,19 @@ export default function SampleReview() {
       </Modal>
     </>
   );
+}
+
+function SampleAudioCell({ fileId, ensureUrl }: { fileId?: string; ensureUrl: (id: string) => Promise<string> }) {
+  const [url, setUrl] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!fileId) return;
+    setLoading(true);
+    ensureUrl(fileId).then((u) => { setUrl(u); setLoading(false); });
+  }, [fileId, ensureUrl]);
+
+  if (!fileId) return <span style={{ color: '#999' }}>未上传</span>;
+  if (loading || !url) return <span style={{ color: '#999' }}>加载中...</span>;
+  return <AudioPlayerBar src={url} />;
 }

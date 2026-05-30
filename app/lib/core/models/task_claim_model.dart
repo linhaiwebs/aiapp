@@ -40,6 +40,7 @@ class TaskClaimModel {
   final bool gainDetection; // from joined task
   final bool silenceDetection; // from joined task
   final int noiseLimit; // from joined task
+  final int silencePadding; // from joined task -- 静音区预留时间(ms)
   final String? sampleFileId; // 采样文件ID
   final String? sampleRejectReason; // 采样驳回原因
   final DateTime createdAt;
@@ -64,6 +65,7 @@ class TaskClaimModel {
     this.signalDetection = false,
     this.gainDetection = false,
     this.silenceDetection = false,
+    this.silencePadding = 0,
     this.noiseLimit = 60,
     this.sampleFileId,
     this.sampleRejectReason,
@@ -99,6 +101,7 @@ class TaskClaimModel {
         gainDetection: json['task']?['gainDetection'] as bool? ?? false,
         silenceDetection: json['task']?['silenceDetection'] as bool? ?? false,
         noiseLimit: _toInt(json['task']?['noiseLimit'], 60),
+        silencePadding: _toInt(json['task']?['silencePadding'], 0),
         sampleFileId: json['sampleFileId'] as String?,
         sampleRejectReason: json['sampleRejectReason'] as String?,
         createdAt: DateTime.parse(json['createdAt'] as String),

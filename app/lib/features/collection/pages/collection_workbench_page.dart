@@ -136,6 +136,30 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
       final opusPath = '${dir.path}/rec_${DateTime.now().millisecondsSinceEpoch}.m4a';
       await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 96000, numChannels: 1), path: opusPath);
 
+      // 静音区预留检查：录音开始后，在 silencePadding ms 内检测是否有有效信号
+      final silenceMs = _claim?.silencePadding ?? 0;
+      if (silenceMs > 0) {
+        final silenceAmps = <double>[];
+        final silenceSub = _recorder.onAmplitudeChanged(const Duration(milliseconds: 100)).listen((amp) {
+          silenceAmps.add(amp.current);
+        });
+        await Future.delayed(Duration(milliseconds: silenceMs));
+        await silenceSub.cancel();
+
+        final hasSignal = silenceAmps.any((a) => a > -40);
+        if (!hasSignal) {
+          try { await _recorder.stop(); } catch (_) {}
+          if (mounted) {
+            showDialog(context: context, builder: (ctx) => AlertDialog(
+              title: const Text('录音不合格'),
+              content: Text('开头静音超过预留时间（${silenceMs}ms），请检测麦克风后重新录制'),
+              actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('确定'))],
+            ));
+          }
+          return;
+        }
+      }
+
       setState(() {
         _isRecording = true;
         _recordingDuration = Duration.zero;

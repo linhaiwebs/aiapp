@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { Table, Card, Tag, Space, Select, Button, Modal, Descriptions, message, Input, Tooltip, Form, Dropdown, Popconfirm } from 'antd';
-import { EyeOutlined, PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, SoundOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
+import { Table, Card, Tag, Space, Select, Button, Modal, Descriptions, message, Input, Form, Dropdown, Popconfirm } from 'antd';
+import { EyeOutlined, PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 import { submissionApi } from '../../api';
+import AudioPlayerBar from '../../components/AudioPlayerBar';
 
 const typeLabels: Record<string, string> = {
   text: '文本采集',
@@ -30,7 +31,6 @@ export default function CollectionDataList() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
   const [detailModal, setDetailModal] = useState<any>(null);
-  const [playingUrl, setPlayingUrl] = useState<string | null>(null);
   const [rejectModal, setRejectModal] = useState<any>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
@@ -143,10 +143,6 @@ export default function CollectionDataList() {
 
   const getFileStreamUrl = (fileId: string) => `/api/files/${fileId}/stream`;
 
-  const handlePlayAudio = (fileId: string) => {
-    setPlayingUrl(playingUrl === fileId ? null : fileId);
-  };
-
   const columns = [
     {
       title: 'ID',
@@ -221,10 +217,12 @@ export default function CollectionDataList() {
       render: (_: any, record: any) => (
         <Space size={0}>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>详情</Button>
-          {(type === 'audio' || type === 'video' || record.task?.type === 'audio' || record.task?.type === 'video') && record.fileIds?.length > 0 && (
-            <Tooltip title="播放">
-              <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => handlePlayAudio(record.fileIds[0])} />
-            </Tooltip>
+          {(type === 'audio' || record.task?.type === 'audio') && record.fileIds?.length > 0 && (
+            <AudioPlayerBar src={getFileStreamUrl(record.fileIds[0])} compact />
+          )}
+          {(type === 'video' || record.task?.type === 'video') && record.fileIds?.length > 0 && (
+            <Button type="link" size="small" icon={<PlayCircleOutlined />}
+              onClick={() => window.open(getFileStreamUrl(record.fileIds[0]), '_blank')}>预览</Button>
           )}
           {record.status === 'pending_review' && (
             <Button type="link" size="small" icon={<CheckCircleOutlined />} style={{ color: '#52c41a' }} onClick={() => handleApprove(record.id)}>通过</Button>
@@ -285,24 +283,6 @@ export default function CollectionDataList() {
           showTotal: (t) => `共 ${t} 条`,
         }}
       />
-
-      {/* Audio/Video Player */}
-      {playingUrl && (
-        <div style={{ position: 'fixed', bottom: 20, right: 20, background: '#fff', padding: 16, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000, maxWidth: 420 }}>
-          <div style={{ marginBottom: 8, fontWeight: 500 }}>
-            <SoundOutlined style={{ marginRight: 8 }} />
-            {type === 'video' ? '视频预览' : '音频预览'}
-          </div>
-          {type === 'video' ? (
-            <video controls autoPlay src={getFileStreamUrl(playingUrl)} style={{ width: '100%', maxHeight: 300, borderRadius: 4 }} onEnded={() => setPlayingUrl(null)} />
-          ) : (
-            <audio controls autoPlay src={getFileStreamUrl(playingUrl)} onEnded={() => setPlayingUrl(null)} style={{ width: '100%', minHeight: 44 }} />
-          )}
-          <div style={{ marginTop: 8, textAlign: 'right' }}>
-            <Button size="small" onClick={() => setPlayingUrl(null)}>关闭</Button>
-          </div>
-        </div>
-      )}
 
       {/* Detail Modal */}
       <Modal
@@ -368,8 +348,8 @@ export default function CollectionDataList() {
                       ) : type === 'image' ? (
                         <img src={getFileStreamUrl(fid)} alt={`文件 ${idx + 1}`} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 6 }} />
                       ) : (
-                        <div style={{ background: '#f5f5f5', borderRadius: 8, padding: 8 }}>
-                          <audio controls src={getFileStreamUrl(fid)} style={{ width: '100%', minHeight: 44 }} />
+                        <div style={{ background: '#f5f5f5', borderRadius: 8, padding: 12 }}>
+                          <AudioPlayerBar src={getFileStreamUrl(fid)} />
                         </div>
                       )}
                     </div>
