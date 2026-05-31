@@ -1,11 +1,14 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/storage/auth_storage.dart';
 import '../../../core/models/user_model.dart';
+import '../../profile/pages/about_page.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
   const RegisterPage({super.key});
@@ -20,8 +23,22 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _passwordController = TextEditingController();
   final _nicknameController = TextEditingController();
   bool _obscurePassword = true;
+  bool _agreedToPrivacy = false;
   int _countdown = 0;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPrivacyAgreement();
+  }
+
+  Future<void> _loadPrivacyAgreement() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() => _agreedToPrivacy = prefs.getBool('privacy_agreed') ?? false);
+    }
+  }
 
   Future<void> _sendSmsCode() async {
     if (_phoneController.text.isEmpty) {
@@ -64,9 +81,112 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     });
   }
 
+  Future<void> _savePrivacyAgreement() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('privacy_agreed', true);
+  }
+
+  void _showPolicy(String title, String content) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.md)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, scrollController) => Container(
+          padding: EdgeInsets.fromLTRB(24.w, 12.h, 24.w, 24.h),
+          child: Column(
+            children: [
+              Container(
+                width: 36.w,
+                height: 4.h,
+                decoration: BoxDecoration(
+                  color: AppColors.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 18.sp,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  child: Text(
+                    content,
+                    style: TextStyle(
+                      fontSize: 14.sp,
+                      color: AppColors.onSurfaceVariant,
+                      height: 1.7,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _privacyCheckbox() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 20.w,
+          height: 20.w,
+          child: Checkbox(
+            value: _agreedToPrivacy,
+            onChanged: (v) => setState(() => _agreedToPrivacy = v ?? false),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        SizedBox(width: 8.w),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(fontSize: 12.sp, color: AppColors.onSurfaceVariant),
+              children: [
+                const TextSpan(text: '我已阅读并同意'),
+                TextSpan(
+                  text: '《用户协议》',
+                  style: const TextStyle(color: AppColors.primary),
+                  recognizer: TapGestureRecognizer()..onTap = () => _showPolicy('用户协议', AboutPage.userAgreement),
+                ),
+                const TextSpan(text: '和'),
+                TextSpan(
+                  text: '《隐私政策》',
+                  style: const TextStyle(color: AppColors.primary),
+                  recognizer: TapGestureRecognizer()..onTap = () => _showPolicy('隐私政策', AboutPage.privacyPolicy),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _handleRegister() async {
     if (_phoneController.text.isEmpty || _passwordController.text.isEmpty || _smsCodeController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请填写完整信息'), backgroundColor: AppColors.error));
+      return;
+    }
+    if (!_agreedToPrivacy) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请先阅读并同意用户协议和隐私政策'), backgroundColor: AppColors.error));
       return;
     }
     setState(() => _isLoading = true);
@@ -87,6 +207,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           final user = UserModel.fromJson(result['user'] as Map<String, dynamic>);
           await authStorage.saveUser(user);
         }
+        await _savePrivacyAgreement();
         if (!mounted) return;
         context.go('/home');
       } else {
@@ -278,6 +399,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         ),
                       ),
                     ),
+                    if (!_agreedToPrivacy) ...[
+                      SizedBox(height: 16.h),
+                      _privacyCheckbox(),
+                    ],
                     SizedBox(height: 24.h),
                     // Register button
                     SizedBox(

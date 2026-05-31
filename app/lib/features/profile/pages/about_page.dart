@@ -62,11 +62,11 @@ class AboutPage extends StatelessWidget {
           _section('政策与协议'),
           SizedBox(height: AppSpacing.sm.h),
           _card([
-            _tile(context, '用户协议', _userAgreement),
+             _tile(context, '用户协议', userAgreement),
             _divider(),
-            _tile(context, '隐私政策', _privacyPolicy),
+             _tile(context, '隐私政策', privacyPolicy),
             _divider(),
-            _tile(context, '服务条款', _termsOfService),
+             _tile(context, '服务条款', termsOfService),
           ]),
 
           SizedBox(height: AppSpacing.lg.h),
@@ -181,7 +181,7 @@ class AboutPage extends StatelessWidget {
     );
   }
 
-  static const _userAgreement = '''
+  static const userAgreement = '''
 用户协议
 
 最后更新日期：2026年1月
@@ -223,7 +223,7 @@ class AboutPage extends StatelessWidget {
 8.2 因本协议产生的争议，双方应友好协商解决；协商不成的，提交有管辖权的人民法院诉讼解决。
 ''';
 
-  static const _privacyPolicy = '''
+  static const privacyPolicy = '''
 隐私政策
 
 最后更新日期：2026年1月
@@ -280,7 +280,7 @@ class AboutPage extends StatelessWidget {
 如果您对本隐私政策有任何疑问，请联系：support@xcai.cn
 ''';
 
-  static const _termsOfService = '''
+  static const termsOfService = '''
 服务条款
 
 最后更新日期：2026年1月
