@@ -87,6 +87,10 @@ export default function TaskForm() {
       const res: any = await taskApi.detail(id!);
       form.setFieldsValue({
         ...res,
+        unitPrice: res.unitPrice != null ? Number(res.unitPrice) : undefined,
+        minQualityScore: res.minQualityScore != null ? Number(res.minQualityScore) : undefined,
+        passRateRequirement: res.passRateRequirement != null ? Number(res.passRateRequirement) : undefined,
+        totalQuantity: res.totalQuantity != null ? Number(res.totalQuantity) : undefined,
         deadline: res.deadline ? dayjs(res.deadline) : undefined,
         categoryId: res.category?.id,
         projectId: res.project?.id,
@@ -138,25 +142,9 @@ export default function TaskForm() {
       if (isEdit) {
         savedTask = await taskApi.update(id!, data);
         message.success('更新成功');
-        // 更新已有任务的文本：删除旧的，重新创建
-        const lines = (data.instructions || '').split('\n').filter((l: string) => l.trim());
-        if (lines.length > 0) {
-          try {
-            await textCollectionApi.batchCreate({ taskId: id!, texts: lines });
-            message.success(`已同步 ${lines.length} 条文本`);
-          } catch { /* 非阻塞 */ }
-        }
       } else {
         savedTask = await taskApi.create(data);
         message.success('创建成功');
-        // 自动从任务说明创建文本采集条目
-        const lines = (data.instructions || '').split('\n').filter((l: string) => l.trim());
-        if (lines.length > 0) {
-          try {
-            await textCollectionApi.batchCreate({ taskId: savedTask.id, texts: lines });
-            message.success(`已自动创建 ${lines.length} 条文本`);
-          } catch { /* 非阻塞 */ }
-        }
       }
       navigate('/tasks');
     } catch (e: any) {

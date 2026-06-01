@@ -129,6 +129,10 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
           );
           try { await _recorder.stop(); } catch (_) {}
           await Future.delayed(const Duration(seconds: 1));
+          if (result == null || !result.allPassed) {
+            _audioCheckPassed = false;
+            return;
+          }
         }
         _audioCheckPassed = true;
       }

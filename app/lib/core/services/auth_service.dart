@@ -46,16 +46,6 @@ class AuthService {
     return res.data is Map<String, dynamic> ? res.data : {};
   }
 
-  Future<Map<String, dynamic>> wechatLogin(String code) async {
-    final res = await _client.dio.post('/auth/wechat', data: {'code': code});
-    return res.data;
-  }
-
-  Future<Map<String, dynamic>> qqLogin(String code) async {
-    final res = await _client.dio.post('/auth/qq', data: {'code': code});
-    return res.data;
-  }
-
   Future<Map<String, dynamic>> refreshToken(String token) async {
     final res = await _client.dio
         .post('/auth/refresh', data: {'refreshToken': token});

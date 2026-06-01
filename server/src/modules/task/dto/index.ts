@@ -29,10 +29,12 @@ export class CreateTaskDto {
   difficulty?: TaskDifficulty;
 
   @ApiProperty({ description: '单价' })
+  @Type(() => Number)
   @IsNumber()
   unitPrice: number;
 
   @ApiProperty({ description: '总数量' })
+  @Type(() => Number)
   @IsNumber()
   totalQuantity: number;
 
@@ -52,11 +54,13 @@ export class CreateTaskDto {
   language?: string;
 
   @ApiProperty({ description: '质量分要求', required: false })
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   minQualityScore?: number;
 
   @ApiProperty({ description: '合格率要求', required: false })
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   passRateRequirement?: number;
@@ -216,14 +220,17 @@ export class UpdateTaskDto {
   @IsOptional()
   difficulty?: TaskDifficulty;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   unitPrice?: number;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   totalQuantity?: number;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   maxClaimsPerUser?: number;
@@ -236,10 +243,12 @@ export class UpdateTaskDto {
   @IsOptional()
   language?: string;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   minQualityScore?: number;
 
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   passRateRequirement?: number;

@@ -173,11 +173,17 @@ export class TaskService {
     const lines = instructions.split('\n').map(l => l.trim()).filter(l => l);
     if (lines.length === 0) return;
 
-    // Check if texts already exist for this task (avoid duplicates)
+    // Delete old PENDING texts and recreate, to support instruction updates
     const existingCount = await this.textCollectionRepository.count({
       where: { taskId: task.id },
     });
-    if (existingCount > 0) return;
+    if (existingCount > 0) {
+      // Only delete texts that haven't been assigned/claimed yet
+      await this.textCollectionRepository.delete({
+        taskId: task.id,
+        status: TextStatus.PENDING,
+      } as any);
+    }
 
     // Use insert (true bulk) instead of save (row-by-row check) for performance
     const BATCH_SIZE = 1000;
