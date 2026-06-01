@@ -38,7 +38,7 @@ export default function CollectionDataList() {
   const [editForm] = Form.useForm();
   const [editLoading, setEditLoading] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
-  const [audioModal, setAudioModal] = useState<{ open: boolean; src: string; title: string }>({ open: false, src: '', title: '' });
+  const [audioModal, setAudioModal] = useState<{ open: boolean; src: string; fileId: string; title: string }>({ open: false, src: '', fileId: '', title: '' });
 
   useEffect(() => {
     loadSubmissions();
@@ -220,7 +220,7 @@ export default function CollectionDataList() {
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>详情</Button>
           {(type === 'audio' || record.task?.type === 'audio') && record.fileIds?.length > 0 && (
             <Button type="link" size="small" icon={<PlayCircleOutlined />}
-              onClick={() => setAudioModal({ open: true, src: getFileStreamUrl(record.fileIds[0]), title: `文件 - ${record.id?.substring(0, 8)}` })}>试听</Button>
+              onClick={() => setAudioModal({ open: true, src: getFileStreamUrl(record.fileIds[0]), fileId: record.fileIds[0], title: `文件 - ${record.id?.substring(0, 8)}` })}>试听</Button>
           )}
           {(type === 'video' || record.task?.type === 'video') && record.fileIds?.length > 0 && (
             <Button type="link" size="small" icon={<PlayCircleOutlined />}
@@ -352,7 +352,7 @@ export default function CollectionDataList() {
                       ) : (
                         <div style={{ background: '#f5f5f5', borderRadius: 8, padding: 12 }}>
                           <Button type="primary" size="small" icon={<PlayCircleOutlined />}
-                            onClick={() => setAudioModal({ open: true, src: getFileStreamUrl(fid), title: `文件 ${idx + 1}` })}>试听</Button>
+                            onClick={() => setAudioModal({ open: true, src: getFileStreamUrl(fid), fileId: fid, title: `文件 ${idx + 1}` })}>试听</Button>
                         </div>
                       )}
                     </div>
@@ -395,8 +395,9 @@ export default function CollectionDataList() {
 
       <AudioPlayerModal
         open={audioModal.open}
-        onClose={() => setAudioModal({ open: false, src: '', title: '' })}
+        onClose={() => setAudioModal({ open: false, src: '', fileId: '', title: '' })}
         src={audioModal.src}
+        fileId={audioModal.fileId}
         title={audioModal.title}
       />
     </Card>

@@ -12,7 +12,7 @@ export default function SampleReview() {
   const [rejectModal, setRejectModal] = useState<any>(null);
   const [reason, setReason] = useState('');
   const [audioUrls, setAudioUrls] = useState<Record<string, string>>({});
-  const [audioModal, setAudioModal] = useState<{ open: boolean; src: string; title: string }>({ open: false, src: '', title: '' });
+  const [audioModal, setAudioModal] = useState<{ open: boolean; src: string; fileId: string; title: string }>({ open: false, src: '', fileId: '', title: '' });
 
   useEffect(() => { loadData(); }, [page]);
 
@@ -60,7 +60,7 @@ export default function SampleReview() {
         <SampleAudioCell
           fileId={r.sampleFileId}
           ensureUrl={ensureUrl}
-          onPlay={(src, title) => setAudioModal({ open: true, src, title })}
+          onPlay={(src, fid, t) => setAudioModal({ open: true, src, fileId: fid, title: t })}
         />
       ),
     },
@@ -87,15 +87,16 @@ export default function SampleReview() {
       </Modal>
       <AudioPlayerModal
         open={audioModal.open}
-        onClose={() => setAudioModal({ open: false, src: '', title: '' })}
+        onClose={() => setAudioModal({ open: false, src: '', fileId: '', title: '' })}
         src={audioModal.src}
+        fileId={audioModal.fileId}
         title={audioModal.title}
       />
     </>
   );
 }
 
-function SampleAudioCell({ fileId, ensureUrl, onPlay }: { fileId?: string; ensureUrl: (id: string) => Promise<string>; onPlay: (src: string, title: string) => void }) {
+function SampleAudioCell({ fileId, ensureUrl, onPlay }: { fileId?: string; ensureUrl: (id: string) => Promise<string>; onPlay: (src: string, fileId: string, title: string) => void }) {
   const [url, setUrl] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
@@ -107,5 +108,5 @@ function SampleAudioCell({ fileId, ensureUrl, onPlay }: { fileId?: string; ensur
 
   if (!fileId) return <span style={{ color: '#999' }}>未上传</span>;
   if (loading || !url) return <span style={{ color: '#999' }}>加载中...</span>;
-  return <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => onPlay(url, `样音 - ${fileId.substring(0, 8)}`)}>试听</Button>;
+  return <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => onPlay(url, fileId!, `样音 - ${fileId!.substring(0, 8)}`)}>试听</Button>;
 }

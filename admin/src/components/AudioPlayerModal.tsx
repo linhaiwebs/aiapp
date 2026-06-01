@@ -13,6 +13,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   src: string;
+  /** fileId for same-origin waveform fetch via /api/files/:id/stream */
+  fileId?: string;
   title?: string;
 }
 
@@ -76,7 +78,7 @@ function drawWaveform(
   ctx.stroke();
 }
 
-export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
+export default function AudioPlayerModal({ open, onClose, src, fileId, title }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const peaksRef = useRef<number[]>([]);
@@ -89,6 +91,9 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
   const [current, setCurrent] = useState(0);
   const [meta, setMeta] = useState<{ sampleRate: number; channels: number } | null>(null);
   const [hasWaveform, setHasWaveform] = useState(false);
+
+  // Waveform URL: always use same-origin streaming endpoint when fileId is available
+  const waveformUrl = fileId ? `/api/files/${fileId}/stream` : src;
 
   // -- load on open/src change --
   useEffect(() => {
@@ -112,7 +117,7 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
 
     let cancelled = false;
 
-    // 1. ALWAYS create <audio> element — works regardless of CORS
+    // 1. <audio> element for playback — src can be any URL (cross-origin OK)
     const audio = new Audio(src);
     audio.preload = 'auto';
     audioRef.current = audio;
@@ -147,7 +152,7 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
       setPhase('error');
     });
 
-    // Wait for audio to be playable, then show UI
+    // Show UI once audio is playable, then load waveform in background
     const onCanPlay = () => {
       if (cancelled) return;
       const d = audio.duration;
@@ -156,8 +161,7 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
         setDuration(d);
       }
       setPhase('ready');
-      // Start waveform loading in background
-      loadWaveform(src);
+      loadWaveform();
     };
     audio.addEventListener('canplay', onCanPlay, { once: true });
 
@@ -165,7 +169,7 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
     const fallbackTimer = setTimeout(() => {
       if (!cancelled && phase === 'loading') {
         setPhase('ready');
-        loadWaveform(src);
+        loadWaveform();
       }
     }, 3000);
 
@@ -181,10 +185,10 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
     };
   }, [open, src]);
 
-  // 2. Best-effort waveform loading (may fail due to CORS)
-  async function loadWaveform(url: string) {
+  // 2. Waveform loading — uses same-origin URL via fileId, not cross-origin src
+  async function loadWaveform() {
     try {
-      const res = await fetch(url);
+      const res = await fetch(waveformUrl);
       if (!res.ok) return;
       const arrayBuffer = await res.arrayBuffer();
 
@@ -197,7 +201,6 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
       setMeta({ sampleRate: buffer.sampleRate, channels: buffer.numberOfChannels });
       setHasWaveform(true);
 
-      // Update duration from decoded buffer (more accurate)
       if (buffer.duration && isFinite(buffer.duration)) {
         durationRef.current = buffer.duration;
         setDuration(buffer.duration);
@@ -205,7 +208,7 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
 
       setTimeout(() => redraw(), 50);
     } catch {
-      // Waveform is optional — playback still works
+      // Waveform loading failed — playback still works
     }
   }
 
@@ -218,7 +221,6 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
     drawWaveform(canvas, peaksRef.current, progress, 1);
   }
 
-  // Redraw on canvas resize
   useEffect(() => {
     if (!open || !hasWaveform) return;
     const canvas = canvasRef.current;
@@ -228,7 +230,6 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
     return () => obs.disconnect();
   }, [open, hasWaveform]);
 
-  // -- controls --
   const togglePlay = useCallback(() => {
     const a = audioRef.current;
     if (!a) return;
@@ -289,17 +290,13 @@ export default function AudioPlayerModal({ open, onClose, src, title }: Props) {
       {phase === 'error' && (
         <div style={{ textAlign: 'center', padding: 48 }}>
           <div style={{ color: '#ff4d4f', fontSize: 14, marginBottom: 16 }}>{errorMsg}</div>
-          <Button icon={<ReloadOutlined />} onClick={() => {
-            // Re-trigger by closing and re-opening via parent — simplest reset
-            handleClose();
-            setTimeout(() => onClose(), 0);
-          }}>关闭</Button>
+          <Button icon={<ReloadOutlined />} onClick={handleClose}>关闭</Button>
         </div>
       )}
 
       {phase === 'ready' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'center' }}>
-          {/* Waveform canvas (only if waveform loaded) */}
+          {/* Waveform canvas */}
           {hasWaveform ? (
             <canvas
               ref={canvasRef}
