@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Table, Card, Tag, Space, Select, Button, Modal, Descriptions, message, Input, Form, Dropdown, Popconfirm } from 'antd';
 import { EyeOutlined, PlayCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, EditOutlined, DeleteOutlined, MoreOutlined } from '@ant-design/icons';
 import { submissionApi } from '../../api';
-import AudioPlayerBar from '../../components/AudioPlayerBar';
+import AudioPlayerModal from '../../components/AudioPlayerModal';
 
 const typeLabels: Record<string, string> = {
   text: '文本采集',
@@ -38,6 +38,7 @@ export default function CollectionDataList() {
   const [editForm] = Form.useForm();
   const [editLoading, setEditLoading] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [audioModal, setAudioModal] = useState<{ open: boolean; src: string; title: string }>({ open: false, src: '', title: '' });
 
   useEffect(() => {
     loadSubmissions();
@@ -218,7 +219,8 @@ export default function CollectionDataList() {
         <Space size={0}>
           <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(record.id)}>详情</Button>
           {(type === 'audio' || record.task?.type === 'audio') && record.fileIds?.length > 0 && (
-            <AudioPlayerBar src={getFileStreamUrl(record.fileIds[0])} compact />
+            <Button type="link" size="small" icon={<PlayCircleOutlined />}
+              onClick={() => setAudioModal({ open: true, src: getFileStreamUrl(record.fileIds[0]), title: `文件 - ${record.id?.substring(0, 8)}` })}>试听</Button>
           )}
           {(type === 'video' || record.task?.type === 'video') && record.fileIds?.length > 0 && (
             <Button type="link" size="small" icon={<PlayCircleOutlined />}
@@ -349,7 +351,8 @@ export default function CollectionDataList() {
                         <img src={getFileStreamUrl(fid)} alt={`文件 ${idx + 1}`} style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 6 }} />
                       ) : (
                         <div style={{ background: '#f5f5f5', borderRadius: 8, padding: 12 }}>
-                          <AudioPlayerBar src={getFileStreamUrl(fid)} />
+                          <Button type="primary" size="small" icon={<PlayCircleOutlined />}
+                            onClick={() => setAudioModal({ open: true, src: getFileStreamUrl(fid), title: `文件 ${idx + 1}` })}>试听</Button>
                         </div>
                       )}
                     </div>
@@ -389,6 +392,13 @@ export default function CollectionDataList() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <AudioPlayerModal
+        open={audioModal.open}
+        onClose={() => setAudioModal({ open: false, src: '', title: '' })}
+        src={audioModal.src}
+        title={audioModal.title}
+      />
     </Card>
   );
 }

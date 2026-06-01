@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Table, Button, Space, Card, message, Modal, Input } from 'antd';
-import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { taskApi } from '../../api';
-import AudioPlayerBar from '../../components/AudioPlayerBar';
+import AudioPlayerModal from '../../components/AudioPlayerModal';
 
 export default function SampleReview() {
   const [data, setData] = useState<any[]>([]);
@@ -12,6 +12,7 @@ export default function SampleReview() {
   const [rejectModal, setRejectModal] = useState<any>(null);
   const [reason, setReason] = useState('');
   const [audioUrls, setAudioUrls] = useState<Record<string, string>>({});
+  const [audioModal, setAudioModal] = useState<{ open: boolean; src: string; title: string }>({ open: false, src: '', title: '' });
 
   useEffect(() => { loadData(); }, [page]);
 
@@ -55,7 +56,13 @@ export default function SampleReview() {
     { title: '申请时间', dataIndex: 'createdAt', width: 160, render: (v: string) => v ? new Date(v).toLocaleString() : '-' },
     {
       title: '样音', key: 'sample', width: 280,
-      render: (_: any, r: any) => <SampleAudioCell fileId={r.sampleFileId} ensureUrl={ensureUrl} />,
+      render: (_: any, r: any) => (
+        <SampleAudioCell
+          fileId={r.sampleFileId}
+          ensureUrl={ensureUrl}
+          onPlay={(src, title) => setAudioModal({ open: true, src, title })}
+        />
+      ),
     },
     {
       title: '操作', key: 'action', width: 140,
@@ -78,11 +85,17 @@ export default function SampleReview() {
       <Modal title="驳回采样" open={!!rejectModal} onOk={handleReject} onCancel={() => setRejectModal(null)}>
         <Input.TextArea rows={3} value={reason} onChange={e => setReason(e.target.value)} placeholder="请输入驳回原因" />
       </Modal>
+      <AudioPlayerModal
+        open={audioModal.open}
+        onClose={() => setAudioModal({ open: false, src: '', title: '' })}
+        src={audioModal.src}
+        title={audioModal.title}
+      />
     </>
   );
 }
 
-function SampleAudioCell({ fileId, ensureUrl }: { fileId?: string; ensureUrl: (id: string) => Promise<string> }) {
+function SampleAudioCell({ fileId, ensureUrl, onPlay }: { fileId?: string; ensureUrl: (id: string) => Promise<string>; onPlay: (src: string, title: string) => void }) {
   const [url, setUrl] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
@@ -94,5 +107,5 @@ function SampleAudioCell({ fileId, ensureUrl }: { fileId?: string; ensureUrl: (i
 
   if (!fileId) return <span style={{ color: '#999' }}>未上传</span>;
   if (loading || !url) return <span style={{ color: '#999' }}>加载中...</span>;
-  return <AudioPlayerBar src={url} />;
+  return <Button type="link" size="small" icon={<PlayCircleOutlined />} onClick={() => onPlay(url, `样音 - ${fileId.substring(0, 8)}`)}>试听</Button>;
 }

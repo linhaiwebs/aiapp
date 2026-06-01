@@ -5,9 +5,10 @@ import {
 } from 'antd';
 import {
   CheckCircleOutlined, CloseCircleOutlined, EyeOutlined,
-  EditOutlined, DeleteOutlined, MoreOutlined,
+  EditOutlined, DeleteOutlined, MoreOutlined, PlayCircleOutlined,
 } from '@ant-design/icons';
 import { submissionApi } from '../../api';
+import AudioPlayerModal from '../../components/AudioPlayerModal';
 
 const { TextArea } = Input;
 
@@ -34,6 +35,7 @@ export default function SubmissionList() {
   const [editForm] = Form.useForm();
   const [editLoading, setEditLoading] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [audioModal, setAudioModal] = useState<{ open: boolean; src: string; title: string }>({ open: false, src: '', title: '' });
 
   useEffect(() => {
     loadSubmissions();
@@ -337,7 +339,8 @@ export default function SubmissionList() {
                     {detailModal.fileIds.map((fid: string, idx: number) => (
                       <div key={fid} style={{ background: '#f5f5f5', borderRadius: 8, padding: 8, width: '100%' }}>
                         <div style={{ marginBottom: 4, fontSize: 12, color: '#888' }}>文件 {idx + 1}</div>
-                        <audio controls src={`/api/files/${fid}/stream`} style={{ width: '100%', minHeight: 44 }} />
+                        <Button type="primary" size="small" icon={<PlayCircleOutlined />}
+                          onClick={() => setAudioModal({ open: true, src: `/api/files/${fid}/stream`, title: `文件 ${idx + 1}` })}>试听</Button>
                       </div>
                     ))}
                   </div>
@@ -413,6 +416,13 @@ export default function SubmissionList() {
           </Form.Item>
         </Form>
       </Modal>
+
+      <AudioPlayerModal
+        open={audioModal.open}
+        onClose={() => setAudioModal({ open: false, src: '', title: '' })}
+        src={audioModal.src}
+        title={audioModal.title}
+      />
     </Card>
   );
 }
