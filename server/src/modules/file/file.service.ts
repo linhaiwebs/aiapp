@@ -295,13 +295,12 @@ export class FileService {
     });
   }
 
-  /** 获取文件流（支持 Range），OSS 返回重定向 URL */
+  /** 获取文件流（支持 Range），OSS 改为代理下载避免 CORS */
   async getFileStream(
     id: string,
     range?: { start: number; end: number },
   ): Promise<{
     stream?: fs.ReadStream;
-    redirectUrl?: string;
     mimeType: string;
     fileSize: number;
     fileName: string;
@@ -309,12 +308,24 @@ export class FileService {
     const file = await this.findOne(id);
 
     if (this.storageType === 'oss') {
-      return {
-        redirectUrl: this.ossPresignedGetUrl(file.storedName),
-        mimeType: file.mimeType || 'application/octet-stream',
-        fileSize: file.fileSize || 0,
-        fileName: file.originalName,
-      };
+      try {
+        const result = await this.ossClient.get(file.storedName);
+        const buffer = Buffer.from(result.content as ArrayBuffer);
+        const tmpDir = path.join(this.localPath, '.tmp');
+        if (!fs.existsSync(tmpDir)) {
+          fs.mkdirSync(tmpDir, { recursive: true });
+        }
+        const tmpPath = path.join(tmpDir, file.storedName);
+        fs.writeFileSync(tmpPath, buffer);
+        return {
+          stream: fs.createReadStream(tmpPath, range ? { start: range.start, end: range.end } : undefined),
+          mimeType: file.mimeType || 'application/octet-stream',
+          fileSize: buffer.length,
+          fileName: file.originalName,
+        };
+      } catch {
+        throw new NotFoundException('OSS 文件获取失败');
+      }
     }
 
     if (this.storageType === 'minio') {

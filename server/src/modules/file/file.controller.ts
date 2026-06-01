@@ -131,14 +131,8 @@ export class FileController {
       range = { start, end: end === Infinity ? undefined! : end };
     }
 
-    const { stream, redirectUrl, mimeType, fileSize, fileName } = await this.fileService.getFileStream(id, range);
+    const { stream, mimeType, fileSize, fileName } = await this.fileService.getFileStream(id, range);
 
-    // OSS: 302 重定向到预签名 URL（直读 OSS，不经服务器）
-    if (redirectUrl) {
-      return res.redirect(302, redirectUrl);
-    }
-
-    // MinIO / Local: 服务器流式传输
     if (!stream) {
       throw new NotFoundException('文件流不可用');
     }
