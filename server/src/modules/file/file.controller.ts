@@ -116,8 +116,6 @@ export class FileController {
   }
 
   @Get(':id/stream')
-  @UseGuards(AuthGuard('jwt'))
-  @ApiBearerAuth()
   @ApiOperation({ summary: '流式播放文件（支持 Range 请求）' })
   async streamFile(
     @Param('id') id: string,
