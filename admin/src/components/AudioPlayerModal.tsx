@@ -188,7 +188,7 @@ export default function AudioPlayerModal({ open, onClose, src, fileId, title }: 
   // 2. Waveform loading — uses same-origin URL via fileId, not cross-origin src
   async function loadWaveform() {
     try {
-      const res = await fetch(waveformUrl);
+      const res = await fetch(waveformUrl, { credentials: 'include' });
       if (!res.ok) return;
       const arrayBuffer = await res.arrayBuffer();
 
