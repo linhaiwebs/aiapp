@@ -71,6 +71,7 @@ export class FileService {
         accessKeySecret: this.configService.get<string>('storage.ossAccessKeySecret') ?? '',
         bucket: this.bucket,
         endpoint: this.configService.get<string>('storage.ossEndpoint') || undefined,
+        secure: this.configService.get<boolean>('storage.ossSecure') ?? true,
       });
       console.log(`[OSS] Connected to bucket ${this.bucket}`);
     } catch (err) {

@@ -58,6 +58,7 @@ export const storageConfig = registerAs('storage', () => {
     ossAccessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
     ossBucket: process.env.OSS_BUCKET || 'xcai',
     ossEndpoint: process.env.OSS_ENDPOINT || '',
+    ossSecure: process.env.OSS_SECURE !== 'false',
     ossCdnDomain: process.env.OSS_CDN_DOMAIN || '',
   };
 });
