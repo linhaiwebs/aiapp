@@ -138,12 +138,11 @@ export default function TaskForm() {
         data.status = 'in_progress';
       }
 
-      let savedTask: any;
       if (isEdit) {
-        savedTask = await taskApi.update(id!, data);
+        await taskApi.update(id!, data);
         message.success('更新成功');
       } else {
-        savedTask = await taskApi.create(data);
+        await taskApi.create(data);
         message.success('创建成功');
       }
       navigate('/tasks');
