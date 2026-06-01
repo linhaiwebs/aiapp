@@ -387,9 +387,15 @@ export class TextCollectionService {
     const task = await this.taskRepository.findOne({ where: { id: taskId } });
     if (!task) return;
 
+    // 防止重复分配
+    const alreadyAssigned = await this.textRepository.count({
+      where: { taskId, assignedUserId: userId },
+    });
+    if (alreadyAssigned > 0) return;
+
     const mode = task.textAssignMode || 'auto';
 
-    // 获取所有文本（用 queryBuilder 避免 In() 在 sql.js 中的兼容问题）
+    // 获取所有 PENDING 文本
     const allTexts = await this.textRepository
       .createQueryBuilder('text')
       .where('text.taskId = :taskId', { taskId })
@@ -438,7 +444,7 @@ export class TextCollectionService {
         .orderBy('text.sortOrder', 'ASC')
         .getMany();
 
-      const total = allTexts.length;
+      const total = pendingTexts.length;
       const assignPeople = task.textAssignCount || claims.length;
       const perUser = Math.ceil(total / assignPeople);
 

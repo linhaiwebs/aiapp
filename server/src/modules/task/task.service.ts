@@ -173,17 +173,11 @@ export class TaskService {
     const lines = instructions.split('\n').map(l => l.trim()).filter(l => l);
     if (lines.length === 0) return;
 
-    // Delete old PENDING texts and recreate, to support instruction updates
+    // 文本已存在则跳过（避免重复创建）
     const existingCount = await this.textCollectionRepository.count({
       where: { taskId: task.id },
     });
-    if (existingCount > 0) {
-      // Only delete texts that haven't been assigned/claimed yet
-      await this.textCollectionRepository.delete({
-        taskId: task.id,
-        status: TextStatus.PENDING,
-      } as any);
-    }
+    if (existingCount > 0) return;
 
     // Use insert (true bulk) instead of save (row-by-row check) for performance
     const BATCH_SIZE = 1000;
