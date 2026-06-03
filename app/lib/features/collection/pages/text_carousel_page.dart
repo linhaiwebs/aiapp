@@ -180,8 +180,9 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
         await Future.delayed(Duration(milliseconds: silenceMs));
         await silenceSub.cancel();
 
-        final hasSignal = silenceAmps.any((a) => a > -40);
-        if (!hasSignal) {
+        final validAmps = silenceAmps.where((a) => a.isFinite).toList();
+        final hasSignal = validAmps.isNotEmpty && validAmps.any((a) => a > -40);
+        if (validAmps.isNotEmpty && !hasSignal) {
           _log('silence check FAILED: no signal in first ${silenceMs}ms');
           try { await _recorder.stop(); } catch (_) {}
           if (mounted) {
@@ -206,6 +207,7 @@ class _TextCarouselPageState extends ConsumerState<TextCarouselPage> {
       setState(() {
         _isRecording = true;
         _recordingTextId = textId;
+        _recordingDuration = Duration.zero;
       });
     } catch (e, stack) {
       _log('startRecording ERROR: $e\n$stack');

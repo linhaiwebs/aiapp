@@ -150,8 +150,9 @@ class _CollectionWorkbenchPageState extends ConsumerState<CollectionWorkbenchPag
         await Future.delayed(Duration(milliseconds: silenceMs));
         await silenceSub.cancel();
 
-        final hasSignal = silenceAmps.any((a) => a > -40);
-        if (!hasSignal) {
+        final validAmps = silenceAmps.where((a) => a.isFinite).toList();
+        final hasSignal = validAmps.isNotEmpty && validAmps.any((a) => a > -40);
+        if (validAmps.isNotEmpty && !hasSignal) {
           try { await _recorder.stop(); } catch (_) {}
           if (mounted) {
             showDialog(context: context, builder: (ctx) => AlertDialog(
